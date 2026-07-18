@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>الملف الشخصي — NurseHub</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<section class="section" style="padding-top:36px" id="profileSection">
+  <div class="container" style="max-width:960px">
+    <div id="loadingState">
+      <div class="skeleton" style="height:320px; border-radius:24px"></div>
+    </div>
+    <div id="notFoundState" class="empty-state" style="display:none">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg>
+      <p>لم يتم العثور على هذا الملف، أو أنه لا يزال قيد المراجعة.</p>
+      <a href="search.html" class="btn btn-outline" style="margin-top:12px">تصفح الممرضين</a>
+    </div>
+
+    <div id="profileContent" style="display:none">
+      <div class="profile-hero card">
+        <div class="profile-photo"><img id="pPhoto" alt=""></div>
+        <div>
+          <div class="pill-row">
+            <span class="stat-pill" id="pVerified" style="display:none">✅ موثّق</span>
+            <span class="stat-pill">👁️ <span id="pVisits">0</span> زيارة</span>
+            <span class="stat-pill">⭐ <span id="pRatingCount">0</span> تقييم</span>
+          </div>
+          <h1 id="pName" style="margin-bottom:6px"></h1>
+          <div class="stars" id="pStars"></div>
+          <div class="meta-row" style="margin-top:10px">📍 <span id="pLocation"></span></div>
+          <div class="meta-row">🎓 <span id="pQual"></span> — <span id="pExp"></span> سنوات خبرة</div>
+          <div class="chips" id="pChips" style="margin-top:10px"></div>
+          <p style="margin-top:14px" id="pBio"></p>
+          <div class="contact-row">
+            <a class="btn btn-primary" id="callBtn" href="#">📞 اتصال</a>
+            <a class="btn btn-accent" id="whatsBtn" href="#" target="_blank">💬 واتساب</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" id="notifBox" style="margin-top:22px; display:none"></div>
+
+      <div class="card" style="margin-top:22px">
+        <div class="section-head" style="margin-bottom:14px">
+          <h2 style="font-size:1.3rem">التقييمات (<span id="revCount">0</span>)</h2>
+        </div>
+
+        <div id="ratingFormWrap">
+          <form id="ratingForm">
+            <div class="form-grid">
+              <div class="field"><label>اسمك *</label><input required id="rName" type="text" placeholder="اكتب اسمك"></div>
+              <div class="field">
+                <label>تقييمك *</label>
+                <div class="star-input" id="starInput">
+                  <span data-v="1">★</span><span data-v="2">★</span><span data-v="3">★</span><span data-v="4">★</span><span data-v="5">★</span>
+                </div>
+                <input type="hidden" id="rStars" value="0">
+              </div>
+            </div>
+            <div class="field full"><label>تعليقك *</label><textarea required id="rComment" placeholder="شاركنا تجربتك مع هذا الممرض..."></textarea></div>
+            <button class="btn btn-primary" type="submit">إرسال التقييم</button>
+          </form>
+        </div>
+        <div id="alreadyRated" style="display:none" class="form-msg show success">لقد قمت بتقييم هذا الممرض من قبل، شكرًا لمشاركتك 🙏</div>
+
+        <div id="reviewsList" style="margin-top:22px"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script type="module">
+import { mountLayout, toast, starString, timeAgo, escapeHtml, getDeviceId, hasRated, markRated } from './app.js';
+import {
+  db, doc, getDoc, updateDoc, increment, collection, addDoc, query, where,
+  orderBy, getDocs, serverTimestamp, runTransaction
+} from './firebase-config.js';
+
+mountLayout('');
+
+const params = new URLSearchParams(window.location.search);
+const nurseId = params.get('id');
+
+if(!nurseId){
+  showNotFound();
+}else{
+  loadProfile(nurseId);
+}
+
+function showNotFound(){
+  document.getElementById('loadingState').style.display = 'none';
+  document.getElementById('notFoundState').style.display = 'block';
+}
+
+async function loadProfile(id){
+  try{
+    const nurseRef = doc(db,'nurses', id);
+    const snap = await getDoc(nurseRef);
+    if(!snap.exists() || snap.data().approved !== true || snap.data().blocked === true){
+      showNotFound(); return;
+    }
+    const n = snap.data();
+    renderProfile(id, n);
+    // Increment visit counter (best-effort, non-blocking)
+    updateDoc(nurseRef, { visits: increment(1) }).catch(()=>{});
+    loadReviews(id);
+  }catch(err){
+    console.error(err);
+    showNotFound();
+  }
+}
+
+function renderProfile(id, n){
+  document.title = `${n.name} — NurseHub`;
+  document.getElementById('loadingState').style.display = 'none';
+  document.getElementById('profileContent').style.display = 'block';
+
+  document.getElementById('pPhoto').src = n.photoURL || 'https://placehold.co/400x400/EEF3F0/4C5D57?text=NurseHub';
+  document.getElementById('pName').textContent = n.name || '';
+  document.getElementById('pStars').textContent = starString(n.rating);
+  document.getElementById('pRatingCount').textContent = n.ratingCount || 0;
+  document.getElementById('pVisits').textContent = (n.visits||0) + 1;
+  document.getElementById('pLocation').textContent = `${n.governorate||''}${n.city ? ' - '+n.city : ''}`;
+  document.getElementById('pQual').textContent = n.qualification || '';
+  document.getElementById('pExp').textContent = n.experience ?? '—';
+  document.getElementById('pBio').textContent = n.bio || '';
+  if(n.verified) document.getElementById('pVerified').style.display = 'inline-flex';
+
+  const chips = document.getElementById('pChips');
+  chips.innerHTML = (n.services||[]).map(s=>`<span class="chip">${escapeHtml(s)}</span>`).join('') +
+                     (n.specialty ? `<span class="chip">${escapeHtml(n.specialty)}</span>` : '');
+
+  document.getElementById('callBtn').href = `tel:${n.phone||''}`;
+  const waNumber = (n.whatsapp||'').replace(/^0/, '20').replace(/\D/g,'');
+  document.getElementById('whatsBtn').href = `https://wa.me/${waNumber}`;
+
+  // Rating widget state
+  if(hasRated(id)){
+    document.getElementById('ratingFormWrap').style.display = 'none';
+    document.getElementById('alreadyRated').style.display = 'block';
+  }
+
+  setupStarInput();
+  setupRatingForm(id, n);
+  loadTargetedNotifications(id);
+}
+
+function setupStarInput(){
+  const stars = document.querySelectorAll('#starInput span');
+  const hidden = document.getElementById('rStars');
+  stars.forEach(s=>{
+    s.addEventListener('click', ()=>{
+      const v = Number(s.dataset.v);
+      hidden.value = v;
+      stars.forEach(st => st.classList.toggle('active', Number(st.dataset.v) <= v));
+    });
+  });
+}
+
+function setupRatingForm(nurseId, currentData){
+  document.getElementById('ratingForm').addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const stars = Number(document.getElementById('rStars').value);
+    const name = document.getElementById('rName').value.trim();
+    const comment = document.getElementById('rComment').value.trim();
+    if(stars < 1){ toast('من فضلك اختر عدد النجوم'); return; }
+    if(!name || !comment){ toast('من فضلك أكمل جميع الحقول'); return; }
+    if(hasRated(nurseId)){ toast('لقد قمت بتقييم هذا الممرض من قبل'); return; }
+
+    const btn = e.target.querySelector('button[type="submit"]');
+    btn.disabled = true; btn.textContent = 'جاري الإرسال...';
+
+    try{
+      await addDoc(collection(db,'ratings'), {
+        nurseId, name, stars, comment,
+        deviceId: getDeviceId(),
+        createdAt: serverTimestamp(),
+      });
+
+      // Recompute aggregate rating atomically
+      const nurseRef = doc(db,'nurses', nurseId);
+      await runTransaction(db, async (tx)=>{
+        const fresh = await tx.get(nurseRef);
+        const data = fresh.data();
+        const newCount = (data.ratingCount||0) + 1;
+        const newAvg = (((data.rating||0) * (data.ratingCount||0)) + stars) / newCount;
+        tx.update(nurseRef, { rating: newAvg, ratingCount: newCount });
+      });
+
+      markRated(nurseId);
+      toast('شكرًا لتقييمك ✅');
+      document.getElementById('ratingFormWrap').style.display = 'none';
+      document.getElementById('alreadyRated').style.display = 'block';
+      loadReviews(nurseId);
+    }catch(err){
+      console.error(err);
+      toast('حدث خطأ، حاول مرة أخرى');
+      btn.disabled = false; btn.textContent = 'إرسال التقييم';
+    }
+  });
+}
+
+async function loadReviews(nurseId){
+  const list = document.getElementById('reviewsList');
+  try{
+    const qy = query(collection(db,'ratings'), where('nurseId','==',nurseId), orderBy('createdAt','desc'));
+    const snap = await getDocs(qy);
+    document.getElementById('revCount').textContent = snap.size;
+    if(snap.empty){
+      list.innerHTML = `<p style="color:var(--ink-soft)">لا توجد تقييمات بعد. كن أول من يقيّم!</p>`;
+      return;
+    }
+    list.innerHTML = snap.docs.map(d=>{
+      const r = d.data();
+      const date = r.createdAt?.toDate ? r.createdAt.toDate() : null;
+      return `<div class="review">
+        <div class="rname">${escapeHtml(r.name)} <span class="stars" style="font-size:.85rem">${starString(r.stars)}</span></div>
+        <div class="rdate">${date ? timeAgo(date) : ''}</div>
+        <p style="margin-top:6px">${escapeHtml(r.comment)}</p>
+      </div>`;
+    }).join('');
+  }catch(err){
+    console.error(err);
+    list.innerHTML = `<p style="color:var(--ink-soft)">تعذر تحميل التقييمات.</p>`;
+  }
+}
+
+async function loadTargetedNotifications(nurseId){
+  try{
+    const qy = query(collection(db,'notifications'), where('target','==',nurseId), orderBy('createdAt','desc'));
+    const snap = await getDocs(qy);
+    if(snap.empty) return;
+    const box = document.getElementById('notifBox');
+    box.style.display = 'block';
+    box.innerHTML = `<h3 style="font-size:1.1rem">📢 آخر تحديثات هذا الممرض</h3>` +
+      snap.docs.slice(0,3).map(d=>{
+        const n = d.data();
+        return `<div class="notif-item"><div class="n-icon">🔔</div><div><b>${escapeHtml(n.title||'')}</b><p style="margin:4px 0 0">${escapeHtml(n.body||'')}</p></div></div>`;
+      }).join('');
+  }catch(err){ console.error(err); }
+}
+</script>
+</body>
+</html>

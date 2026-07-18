@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>سجّل كممرض — NurseHub</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<section class="section" style="padding-top:36px">
+  <div class="container" style="max-width:880px">
+    <h1>انضم إلى NurseHub كممرض/ممرضة</h1>
+    <p class="lead" style="color:var(--ink-soft)">أكمل بياناتك بدقة. لن يظهر ملفك للعامة إلا بعد مراجعة فريق NurseHub والموافقة عليه.</p>
+
+    <div class="form-msg" id="formMsg"></div>
+
+    <form class="card" id="regForm">
+
+      <div class="field full">
+        <label>الصورة الشخصية *</label>
+        <div class="upload-box" id="uploadBox">
+          <span id="uploadPlaceholder">📷 اضغط لاختيار صورة واضحة</span>
+          <img id="photoPreview" style="display:none">
+        </div>
+        <input type="file" id="photoInput" accept="image/*" class="visually-hidden">
+      </div>
+
+      <div class="form-grid">
+        <div class="field"><label>الاسم الثلاثي *</label><input required name="name" type="text" placeholder="مثال: منى أحمد سيد"></div>
+        <div class="field"><label>الرقم القومي *</label><input required name="nationalId" type="text" pattern="\d{14}" maxlength="14" placeholder="14 رقم"><span class="hint">🔒 لن يظهر إلا للمشرف فقط</span></div>
+        <div class="field"><label>رقم الهاتف *</label><input required name="phone" type="tel" placeholder="01xxxxxxxxx"></div>
+        <div class="field"><label>رقم واتساب *</label><input required name="whatsapp" type="tel" placeholder="01xxxxxxxxx"></div>
+        <div class="field"><label>السن *</label><input required name="age" type="number" min="18" max="75"></div>
+        <div class="field"><label>الجنس *</label>
+          <select required name="gender"><option value="">اختر</option><option>ذكر</option><option>أنثى</option></select>
+        </div>
+        <div class="field"><label>المحافظة *</label><select required name="governorate" id="govSelect"><option value="">اختر</option></select></div>
+        <div class="field"><label>المدينة *</label><input required name="city" type="text" placeholder="مثال: مدينة نصر"></div>
+        <div class="field"><label>محل الميلاد *</label><input required name="birthplace" type="text"></div>
+        <div class="field"><label>المؤهل *</label><input required name="qualification" type="text" placeholder="مثال: بكالوريوس تمريض"></div>
+        <div class="field"><label>سنة التخرج *</label><input required name="gradYear" type="number" min="1970" max="2026"></div>
+        <div class="field"><label>سنوات الخبرة *</label><input required name="experience" type="number" min="0" max="50"></div>
+        <div class="field full"><label>جهة العمل الحالية</label><input name="currentWork" type="text" placeholder="مثال: مستشفى دار الفؤاد (اختياري)"></div>
+        <div class="field full"><label>التخصص الرئيسي *</label><select required name="specialty" id="specSelect"><option value="">اختر</option></select></div>
+      </div>
+
+      <div class="field full">
+        <label>الخدمات التي تقدمها *</label>
+        <div class="checkbox-grid" id="servicesGrid"></div>
+      </div>
+
+      <div class="field full">
+        <label>نبذة تعريفية *</label>
+        <textarea required name="bio" maxlength="600" placeholder="اكتب نبذة مختصرة عن خبرتك وأسلوبك في التعامل مع المرضى..."></textarea>
+      </div>
+
+      <div class="field full" style="display:flex; align-items:flex-start; gap:10px">
+        <input type="checkbox" id="agree" required style="margin-top:5px">
+        <label for="agree" style="font-weight:500">أقر بأن جميع البيانات المدخلة صحيحة، وأوافق على مراجعتها من قبل إدارة NurseHub قبل نشر ملفي.</label>
+      </div>
+
+      <div class="progress" id="uploadProgress" style="display:none"><i></i></div>
+      <button class="btn btn-primary btn-block" id="submitBtn" type="submit" style="margin-top:10px">إرسال طلب التسجيل</button>
+    </form>
+  </div>
+</section>
+
+<script type="module">
+import { mountLayout, GOVERNORATES, SPECIALTIES, toast } from './app.js';
+import { db, collection, addDoc, doc, setDoc, serverTimestamp, compressImageToDataURL } from './firebase-config.js';
+
+mountLayout('register.html');
+
+const govSelect = document.getElementById('govSelect');
+GOVERNORATES.forEach(g => govSelect.insertAdjacentHTML('beforeend', `<option>${g}</option>`));
+const specSelect = document.getElementById('specSelect');
+SPECIALTIES.forEach(s => specSelect.insertAdjacentHTML('beforeend', `<option>${s}</option>`));
+
+const SERVICES = [
+  "حقن وريدية وعضلية","تركيب محاليل","قياس ضغط وسكر","تغيير ضمادات وجروح","رعاية قسطرة بولية",
+  "متابعة ما بعد العملية","رعاية كبار السن","رعاية أطفال حديثي الولادة","عمل غسيل كلوي منزلي (متابعة)","تغذية أنبوبية"
+];
+const servicesGrid = document.getElementById('servicesGrid');
+SERVICES.forEach((s,i)=>{
+  servicesGrid.insertAdjacentHTML('beforeend', `
+    <label class="checkbox-item"><input type="checkbox" name="services" value="${s}"> ${s}</label>`);
+});
+
+// Photo upload preview
+const uploadBox = document.getElementById('uploadBox');
+const photoInput = document.getElementById('photoInput');
+const photoPreview = document.getElementById('photoPreview');
+const uploadPlaceholder = document.getElementById('uploadPlaceholder');
+let photoFile = null;
+
+uploadBox.addEventListener('click', ()=> photoInput.click());
+photoInput.addEventListener('change', ()=>{
+  const file = photoInput.files[0];
+  if(!file) return;
+  if(file.size > 5*1024*1024){ toast('حجم الصورة يجب ألا يتجاوز 5 ميجابايت'); return; }
+  photoFile = file;
+  photoPreview.src = URL.createObjectURL(file);
+  photoPreview.style.display = 'block';
+  uploadPlaceholder.style.display = 'none';
+});
+
+const formMsg = document.getElementById('formMsg');
+function showMsg(text, kind){
+  formMsg.textContent = text;
+  formMsg.className = `form-msg show ${kind}`;
+}
+
+document.getElementById('regForm').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const form = e.target;
+  const submitBtn = document.getElementById('submitBtn');
+
+  const services = [...form.querySelectorAll('input[name="services"]:checked')].map(c=>c.value);
+  if(services.length === 0){ showMsg('من فضلك اختر خدمة واحدة على الأقل.', 'error'); return; }
+  if(!photoFile){ showMsg('من فضلك أضف صورتك الشخصية.', 'error'); return; }
+
+  const nationalId = form.nationalId.value.trim();
+  if(!/^\d{14}$/.test(nationalId)){ showMsg('الرقم القومي يجب أن يتكون من 14 رقمًا.', 'error'); return; }
+
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'جاري الإرسال...';
+
+  try{
+    // 1) Compress the photo client-side into a small base64 JPEG.
+    //    (No Firebase Storage bucket needed — the image is stored
+    //    directly inside the Firestore document below.)
+    const progressWrap = document.getElementById('uploadProgress');
+    progressWrap.style.display = 'block';
+    progressWrap.querySelector('i').style.width = '35%';
+    const photoURL = await compressImageToDataURL(photoFile, { maxSize: 480, quality: 0.72 });
+    progressWrap.querySelector('i').style.width = '75%';
+
+    // 2) Create the public nurse doc with the photo already embedded.
+    const nurseRef = await addDoc(collection(db,'nurses'), {
+      name: form.name.value.trim(),
+      phone: form.phone.value.trim(),
+      whatsapp: form.whatsapp.value.trim(),
+      age: Number(form.age.value),
+      gender: form.gender.value,
+      governorate: form.governorate.value,
+      city: form.city.value.trim(),
+      birthplace: form.birthplace.value.trim(),
+      qualification: form.qualification.value.trim(),
+      gradYear: Number(form.gradYear.value),
+      currentWork: form.currentWork.value.trim(),
+      experience: Number(form.experience.value),
+      specialty: form.specialty.value,
+      services,
+      bio: form.bio.value.trim(),
+      photoURL,
+      approved: false,
+      verified: false,
+      blocked: false,
+      rating: 0,
+      ratingCount: 0,
+      visits: 0,
+      createdAt: serverTimestamp(),
+    });
+    progressWrap.querySelector('i').style.width = '100%';
+
+    // 3) Store the sensitive national ID separately (admin-only reads)
+    await setDoc(doc(db,'nurses_private', nurseRef.id), {
+      nationalId,
+      createdAt: serverTimestamp(),
+    });
+
+    showMsg('تم إرسال طلبك بنجاح ✅ سيتم مراجعته والموافقة عليه قريبًا من قبل الإدارة.', 'success');
+    form.reset();
+    photoPreview.style.display = 'none';
+    uploadPlaceholder.style.display = 'block';
+    submitBtn.textContent = 'تم الإرسال';
+  }catch(err){
+    console.error(err);
+    showMsg('حدث خطأ أثناء إرسال البيانات. حاول مرة أخرى.', 'error');
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'إرسال طلب التسجيل';
+  }
+});
+</script>
+</body>
+</html>

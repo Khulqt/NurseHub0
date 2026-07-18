@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NurseHub — منصة التمريض المنزلي في مصر</title>
+<meta name="description" content="ابحث عن أفضل ممرضي وممرضات التمريض المنزلي المعتمدين في محافظتك.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<section class="hero">
+  <div class="container">
+    <span class="hero-eyebrow">🏠 رعاية تمريضية منزلية موثوقة</span>
+    <h1>ابحث عن ممرض منزلي تثق به، في دقائق</h1>
+    <p class="lead">NurseHub يجمع أفضل الكوادر التمريضية المعتمدة في كل محافظات مصر، مع تقييمات حقيقية من عملاء سابقين، لتختار براحة تامة.</p>
+
+    <div class="hero-stats">
+      <div class="stat"><b id="statNurses">—</b><span>ممرض وممرضة</span></div>
+      <div class="stat"><b id="statGov">26</b><span>محافظة</span></div>
+      <div class="stat"><b id="statRatings">—</b><span>تقييم من العملاء</span></div>
+    </div>
+
+    <form class="search-panel" id="heroSearch">
+      <div class="search-field">
+        <label for="q">الاسم / التخصص</label>
+        <input id="q" name="q" type="text" placeholder="مثال: رعاية مسنين">
+      </div>
+      <div class="search-field">
+        <label for="gov">المحافظة</label>
+        <select id="gov" name="gov"><option value="">الكل</option></select>
+      </div>
+      <div class="search-field">
+        <label for="city">المدينة</label>
+        <input id="city" name="city" type="text" placeholder="مثال: المعادي">
+      </div>
+      <button type="submit" class="btn btn-primary">🔍 بحث</button>
+    </form>
+  </div>
+</section>
+
+<main>
+  <div class="container">
+    <section class="section" id="adSectionTop" style="display:none">
+      <div class="grid" style="grid-template-columns:1fr" id="adSlotTop"></div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <div>
+          <h2>الأعلى تقييمًا</h2>
+          <p class="sub">ممرضون اختارهم العملاء بثقة</p>
+        </div>
+        <a href="search.html" class="link-btn">عرض الكل ←</a>
+      </div>
+      <div class="grid" id="topRatedGrid"><div class="skeleton" style="height:280px"></div><div class="skeleton" style="height:280px"></div><div class="skeleton" style="height:280px"></div></div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <div>
+          <h2>الممرضون الموثقون</h2>
+          <p class="sub">حاصلون على علامة التوثيق من فريق NurseHub</p>
+        </div>
+      </div>
+      <div class="grid" id="verifiedGrid"></div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <div>
+          <h2>أحدث المنضمين</h2>
+          <p class="sub">كوادر جديدة انضمت لمنصة NurseHub</p>
+        </div>
+        <a href="search.html" class="link-btn">عرض الكل ←</a>
+      </div>
+      <div class="grid" id="latestGrid"></div>
+    </section>
+  </div>
+</main>
+
+<script type="module">
+import { mountLayout, GOVERNORATES, starString, escapeHtml } from './app.js';
+import { db, collection, query, where, orderBy, limit, getDocs } from './firebase-config.js';
+
+mountLayout('index.html');
+
+const govSelect = document.getElementById('gov');
+GOVERNORATES.forEach(g => govSelect.insertAdjacentHTML('beforeend', `<option>${g}</option>`));
+
+document.getElementById('heroSearch').addEventListener('submit', (e)=>{
+  e.preventDefault();
+  const q = document.getElementById('q').value.trim();
+  const gov = document.getElementById('gov').value;
+  const city = document.getElementById('city').value.trim();
+  const params = new URLSearchParams();
+  if(q) params.set('q', q);
+  if(gov) params.set('gov', gov);
+  if(city) params.set('city', city);
+  window.location.href = 'search.html?' + params.toString();
+});
+
+function nurseCard(n){
+  const photo = n.photoURL || 'https://placehold.co/400x300/EEF3F0/4C5D57?text=NurseHub';
+  return `
+  <a class="nurse-card" href="profile.html?id=${n.id}">
+    <div class="photo-wrap">
+      <img src="${photo}" alt="${escapeHtml(n.name||'')}" loading="lazy">
+      ${n.verified ? `<span class="trust-badge"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l7 4v6c0 5-3.4 8.4-7 10-3.6-1.6-7-5-7-10V6l7-4z"/></svg> موثّق</span>` : ''}
+    </div>
+    <div class="body">
+      <div class="name-row">${escapeHtml(n.name||'')}</div>
+      <div class="meta-row">📍 ${escapeHtml(n.governorate||'')}${n.city ? ' - '+escapeHtml(n.city) : ''}</div>
+      <div class="rating-row">${starString(n.rating)} <span class="count">(${n.ratingCount||0})</span></div>
+      <div class="chips">${(n.services||[]).slice(0,2).map(s=>`<span class="chip">${escapeHtml(s)}</span>`).join('')}</div>
+    </div>
+  </a>`;
+}
+
+function emptyState(msg){
+  return `<div class="empty-state" style="grid-column:1/-1">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="7"/><path d="M21 21l-3.5-3.5"/></svg>
+    <p>${msg}</p></div>`;
+}
+
+async function loadSection(gridId, constraints){
+  const grid = document.getElementById(gridId);
+  try{
+    const qy = query(collection(db,'nurses'), ...constraints);
+    const snap = await getDocs(qy);
+    if(snap.empty){ grid.innerHTML = emptyState('لا يوجد ممرضون بعد في هذا القسم.'); return; }
+    grid.innerHTML = snap.docs.map(d => nurseCard({id:d.id, ...d.data()})).join('');
+  }catch(err){
+    console.error(err);
+    grid.innerHTML = emptyState('تعذر تحميل البيانات حاليًا.');
+  }
+}
+
+async function loadStats(){
+  try{
+    const snap = await getDocs(query(collection(db,'nurses'), where('approved','==',true)));
+    document.getElementById('statNurses').textContent = snap.size;
+    let totalRatings = 0;
+    snap.forEach(d => totalRatings += (d.data().ratingCount||0));
+    document.getElementById('statRatings').textContent = totalRatings;
+  }catch(e){ console.error(e); }
+}
+
+async function loadAds(){
+  try{
+    const now = new Date();
+    const snap = await getDocs(query(collection(db,'ads'), where('active','==',true)));
+    const live = snap.docs.filter(d=>{
+      const a = d.data();
+      const end = a.endDate?.toDate ? a.endDate.toDate() : new Date(a.endDate);
+      return !end || end > now;
+    });
+    if(!live.length) return;
+    const a = live[0].data();
+    document.getElementById('adSectionTop').style.display = '';
+    document.getElementById('adSlotTop').innerHTML = `
+      <a class="ad-slot" href="profile.html?id=${a.nurseId||''}" style="min-height:160px">
+        ${a.imageURL ? `<img src="${a.imageURL}" alt="">` : ''}
+        <span class="ad-label">إعلان</span>
+        <div class="ad-body"><h3 style="margin:0;color:#fff">${escapeHtml(a.title||'')}</h3></div>
+      </a>`;
+  }catch(e){ console.error(e); }
+}
+
+loadStats();
+loadAds();
+loadSection('topRatedGrid', [where('approved','==',true), where('blocked','==',false), orderBy('rating','desc'), limit(6)]);
+loadSection('verifiedGrid', [where('approved','==',true), where('blocked','==',false), where('verified','==',true), limit(6)]);
+loadSection('latestGrid', [where('approved','==',true), where('blocked','==',false), orderBy('createdAt','desc'), limit(6)]);
+</script>
+</body>
+</html>

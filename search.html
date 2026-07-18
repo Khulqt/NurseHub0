@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ابحث عن ممرض — NurseHub</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<section class="section" style="padding-top:36px">
+  <div class="container">
+    <h1>ابحث عن ممرض منزلي</h1>
+    <p class="lead" style="color:var(--ink-soft)">استخدم الفلاتر لتضييق نتائج البحث حسب احتياجك.</p>
+
+    <div class="card" style="margin-bottom:26px">
+      <form id="filterForm" class="form-grid">
+        <div class="field"><label>الاسم أو الكلمة المفتاحية</label><input id="fQ" type="text" placeholder="مثال: منى / رعاية مسنين"></div>
+        <div class="field"><label>المحافظة</label><select id="fGov"><option value="">الكل</option></select></div>
+        <div class="field"><label>المدينة</label><input id="fCity" type="text" placeholder="مثال: مدينة نصر"></div>
+        <div class="field"><label>التخصص</label><select id="fSpec"><option value="">الكل</option></select></div>
+        <div class="field full" style="display:flex; gap:10px">
+          <button class="btn btn-primary" type="submit">🔍 بحث</button>
+          <button class="btn btn-outline" type="button" id="clearBtn">مسح الفلاتر</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="section-head">
+      <div><h2 id="resultsTitle" style="font-size:1.2rem">كل الممرضين</h2></div>
+      <div class="tabs">
+        <button data-sort="rating" class="active">الأعلى تقييمًا</button>
+        <button data-sort="createdAt">الأحدث</button>
+        <button data-sort="visits">الأكثر زيارة</button>
+      </div>
+    </div>
+
+    <div class="grid" id="resultsGrid"><div class="skeleton" style="height:280px"></div><div class="skeleton" style="height:280px"></div><div class="skeleton" style="height:280px"></div></div>
+    <div style="text-align:center; margin-top:26px">
+      <button class="btn btn-outline" id="loadMoreBtn" style="display:none">عرض المزيد</button>
+    </div>
+  </div>
+</section>
+
+<script type="module">
+import { mountLayout, GOVERNORATES, SPECIALTIES, starString, escapeHtml } from './app.js';
+import { db, collection, query, where, orderBy, limit, getDocs, startAfter } from './firebase-config.js';
+
+mountLayout('search.html');
+
+const fGov = document.getElementById('fGov');
+GOVERNORATES.forEach(g => fGov.insertAdjacentHTML('beforeend', `<option>${g}</option>`));
+const fSpec = document.getElementById('fSpec');
+SPECIALTIES.forEach(s => fSpec.insertAdjacentHTML('beforeend', `<option>${s}</option>`));
+
+const params = new URLSearchParams(window.location.search);
+document.getElementById('fQ').value = params.get('q') || '';
+document.getElementById('fGov').value = params.get('gov') || '';
+document.getElementById('fCity').value = params.get('city') || '';
+document.getElementById('fSpec').value = params.get('spec') || '';
+
+let currentSort = 'rating';
+let lastDoc = null;
+const PAGE_SIZE = 9;
+
+function nurseCard(n){
+  const photo = n.photoURL || 'https://placehold.co/400x300/EEF3F0/4C5D57?text=NurseHub';
+  return `
+  <a class="nurse-card" href="profile.html?id=${n.id}">
+    <div class="photo-wrap">
+      <img src="${photo}" alt="${escapeHtml(n.name||'')}" loading="lazy">
+      ${n.verified ? `<span class="trust-badge"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l7 4v6c0 5-3.4 8.4-7 10-3.6-1.6-7-5-7-10V6l7-4z"/></svg> موثّق</span>` : ''}
+    </div>
+    <div class="body">
+      <div class="name-row">${escapeHtml(n.name||'')}</div>
+      <div class="meta-row">📍 ${escapeHtml(n.governorate||'')}${n.city ? ' - '+escapeHtml(n.city) : ''}</div>
+      <div class="rating-row">${starString(n.rating)} <span class="count">(${n.ratingCount||0})</span></div>
+      <div class="chips">${(n.services||[]).slice(0,2).map(s=>`<span class="chip">${escapeHtml(s)}</span>`).join('')}</div>
+    </div>
+  </a>`;
+}
+
+function emptyState(msg){
+  return `<div class="empty-state" style="grid-column:1/-1">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="7"/><path d="M21 21l-3.5-3.5"/></svg>
+    <p>${msg}</p></div>`;
+}
+
+async function runSearch(reset=true){
+  const grid = document.getElementById('resultsGrid');
+  const loadMoreBtn = document.getElementById('loadMoreBtn');
+  if(reset){ grid.innerHTML = `<div class="skeleton" style="height:280px"></div><div class="skeleton" style="height:280px"></div><div class="skeleton" style="height:280px"></div>`; lastDoc = null; }
+
+  const gov = document.getElementById('fGov').value;
+  const spec = document.getElementById('fSpec').value;
+
+  try{
+    const constraints = [where('approved','==',true), where('blocked','==',false)];
+    if(gov) constraints.push(where('governorate','==',gov));
+    if(spec) constraints.push(where('specialty','==',spec));
+    constraints.push(orderBy(currentSort,'desc'));
+    if(lastDoc) constraints.push(startAfter(lastDoc));
+    constraints.push(limit(PAGE_SIZE));
+
+    const snap = await getDocs(query(collection(db,'nurses'), ...constraints));
+    let docs = snap.docs;
+
+    // Client-side filter for free-text query & city (Firestore has limited text search)
+    const qText = document.getElementById('fQ').value.trim().toLowerCase();
+    const cityText = document.getElementById('fCity').value.trim().toLowerCase();
+    let items = docs.map(d=>({id:d.id, ...d.data()}));
+    if(qText){
+      items = items.filter(n =>
+        (n.name||'').toLowerCase().includes(qText) ||
+        (n.specialty||'').toLowerCase().includes(qText) ||
+        (n.services||[]).some(s=>s.toLowerCase().includes(qText))
+      );
+    }
+    if(cityText){
+      items = items.filter(n => (n.city||'').toLowerCase().includes(cityText));
+    }
+
+    if(docs.length) lastDoc = docs[docs.length-1];
+    loadMoreBtn.style.display = docs.length === PAGE_SIZE ? 'inline-flex' : 'none';
+
+    if(reset){
+      grid.innerHTML = items.length ? items.map(nurseCard).join('') : emptyState('لا توجد نتائج مطابقة لبحثك.');
+    }else{
+      if(items.length) grid.insertAdjacentHTML('beforeend', items.map(nurseCard).join(''));
+    }
+  }catch(err){
+    console.error(err);
+    grid.innerHTML = emptyState('تعذر تحميل النتائج حاليًا.');
+  }
+}
+
+document.getElementById('filterForm').addEventListener('submit', (e)=>{ e.preventDefault(); runSearch(true); });
+document.getElementById('clearBtn').addEventListener('click', ()=>{
+  document.getElementById('filterForm').reset();
+  runSearch(true);
+});
+document.getElementById('loadMoreBtn').addEventListener('click', ()=> runSearch(false));
+
+document.querySelectorAll('.tabs button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.tabs button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    currentSort = btn.dataset.sort;
+    runSearch(true);
+  });
+});
+
+runSearch(true);
+</script>
+</body>
+</html>

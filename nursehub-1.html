@@ -1,0 +1,1607 @@
+<!DOCTYPE html>
+<!--
+=====================================================================
+ NurseHub — ملف واحد شامل (HTML + CSS + JS) — لا يحتاج أي ملفات أخرى
+ لتشغيل الموقع نفسه. هذا التعليق مرجع فقط يحتوي على كل ما تحتاجه
+ لإعداد Firebase، محفوظ هنا حتى لو احتفظت بهذا الملف وحده.
+=====================================================================
+
+خطوات التشغيل:
+1) في Firebase Console لمشروع "students-699de":
+   - Authentication → Sign-in method → فعّل "Email/Password".
+   - Firestore Database → أنشئ قاعدة بيانات (Production mode).
+   - (لا حاجة لتفعيل Storage — الصور تُحفظ Base64 داخل Firestore).
+2) Authentication → Users → أنشئ حساب بريد/كلمة مرور للمشرف
+   (هو نفسه المستخدم لتسجيل الدخول في admin.html / #/admin).
+3) الصق قواعد الأمان التالية في Firestore → Rules → Publish.
+4) الفهارس المركّبة: أول ما تستخدم البحث المتقدم بفلاتر مختلفة،
+   Firestore هيديك رابط تلقائي لإنشاء أي فهرس ناقص. أو استخدم
+   `firebase deploy --only firestore:indexes` بملف firestore.indexes.json
+   الموجود أسفل هذا التعليق.
+5) الوصول للوحة الإدارة: اضغط 5 مرات على النقطة (•) بجانب حقوق النشر
+   أسفل أي صفحة، أو افتح الرابط مباشرة: yourdomain.com/#/admin
+
+---------------------------------------------------------------------
+firestore.rules  (Firestore Database → Rules)
+---------------------------------------------------------------------
+rules_version = '2';
+
+function isAdmin() {
+  return request.auth != null;
+}
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /nurses/{nurseId} {
+      allow read: if isAdmin() ||
+        (resource.data.approved == true && resource.data.blocked == false);
+
+      allow create: if
+        request.resource.data.approved == false &&
+        request.resource.data.verified == false &&
+        request.resource.data.blocked == false &&
+        request.resource.data.rating == 0 &&
+        request.resource.data.ratingCount == 0 &&
+        request.resource.data.visits == 0 &&
+        request.resource.data.name is string &&
+        request.resource.data.phone is string;
+
+      allow update: if isAdmin() ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['visits']);
+
+      allow delete: if isAdmin();
+    }
+
+    match /nurses_private/{nurseId} {
+      allow read: if isAdmin();
+      allow create: if request.resource.data.nationalId is string &&
+                       request.resource.data.nationalId.size() == 14;
+      allow update, delete: if isAdmin();
+    }
+
+    match /ratings/{ratingId} {
+      allow read: if true;
+      allow create: if
+        request.resource.data.nurseId is string &&
+        request.resource.data.name is string &&
+        request.resource.data.name.size() > 0 &&
+        request.resource.data.comment is string &&
+        request.resource.data.comment.size() > 0 &&
+        request.resource.data.stars is int &&
+        request.resource.data.stars >= 1 &&
+        request.resource.data.stars <= 5;
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+
+    match /ads/{adId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /notifications/{notifId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+  }
+}
+
+---------------------------------------------------------------------
+firestore.indexes.json  (composite indexes — deploy or auto-create via
+the links Firestore prints in the browser console on first use)
+---------------------------------------------------------------------
+{
+  "indexes": [
+    { "collectionGroup": "nurses", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "approved", "order": "ASCENDING" },
+      { "fieldPath": "blocked", "order": "ASCENDING" },
+      { "fieldPath": "rating", "order": "DESCENDING" } ]},
+    { "collectionGroup": "nurses", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "approved", "order": "ASCENDING" },
+      { "fieldPath": "blocked", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" } ]},
+    { "collectionGroup": "nurses", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "approved", "order": "ASCENDING" },
+      { "fieldPath": "blocked", "order": "ASCENDING" },
+      { "fieldPath": "visits", "order": "DESCENDING" } ]},
+    { "collectionGroup": "nurses", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "approved", "order": "ASCENDING" },
+      { "fieldPath": "blocked", "order": "ASCENDING" },
+      { "fieldPath": "verified", "order": "ASCENDING" } ]},
+    { "collectionGroup": "nurses", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "approved", "order": "ASCENDING" },
+      { "fieldPath": "blocked", "order": "ASCENDING" },
+      { "fieldPath": "governorate", "order": "ASCENDING" },
+      { "fieldPath": "rating", "order": "DESCENDING" } ]},
+    { "collectionGroup": "nurses", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "approved", "order": "ASCENDING" },
+      { "fieldPath": "blocked", "order": "ASCENDING" },
+      { "fieldPath": "governorate", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" } ]},
+    { "collectionGroup": "nurses", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "approved", "order": "ASCENDING" },
+      { "fieldPath": "blocked", "order": "ASCENDING" },
+      { "fieldPath": "governorate", "order": "ASCENDING" },
+      { "fieldPath": "visits", "order": "DESCENDING" } ]},
+    { "collectionGroup": "nurses", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "approved", "order": "ASCENDING" },
+      { "fieldPath": "blocked", "order": "ASCENDING" },
+      { "fieldPath": "specialty", "order": "ASCENDING" },
+      { "fieldPath": "rating", "order": "DESCENDING" } ]},
+    { "collectionGroup": "nurses", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "approved", "order": "ASCENDING" },
+      { "fieldPath": "blocked", "order": "ASCENDING" },
+      { "fieldPath": "specialty", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" } ]},
+    { "collectionGroup": "nurses", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "approved", "order": "ASCENDING" },
+      { "fieldPath": "blocked", "order": "ASCENDING" },
+      { "fieldPath": "specialty", "order": "ASCENDING" },
+      { "fieldPath": "visits", "order": "DESCENDING" } ]},
+    { "collectionGroup": "nurses", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "approved", "order": "ASCENDING" },
+      { "fieldPath": "blocked", "order": "ASCENDING" },
+      { "fieldPath": "governorate", "order": "ASCENDING" },
+      { "fieldPath": "specialty", "order": "ASCENDING" },
+      { "fieldPath": "rating", "order": "DESCENDING" } ]},
+    { "collectionGroup": "nurses", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "approved", "order": "ASCENDING" },
+      { "fieldPath": "blocked", "order": "ASCENDING" },
+      { "fieldPath": "governorate", "order": "ASCENDING" },
+      { "fieldPath": "specialty", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" } ]},
+    { "collectionGroup": "nurses", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "approved", "order": "ASCENDING" },
+      { "fieldPath": "blocked", "order": "ASCENDING" },
+      { "fieldPath": "governorate", "order": "ASCENDING" },
+      { "fieldPath": "specialty", "order": "ASCENDING" },
+      { "fieldPath": "visits", "order": "DESCENDING" } ]},
+    { "collectionGroup": "nurses", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "approved", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" } ]},
+    { "collectionGroup": "ratings", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "nurseId", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" } ]},
+    { "collectionGroup": "notifications", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "target", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" } ]}
+  ]
+}
+
+بنية Firestore المستخدمة:
+- nurses            بيانات الممرض العامة (بدون الرقم القومي)
+- nurses_private    الرقم القومي فقط — قراءة للمشرف حصريًا
+- ratings           تقييمات الزوار (اسم، نجوم، تعليق، معرّف الجهاز)
+- ads               الإعلانات المُدارة من لوحة التحكم
+- notifications     الإشعارات (للجميع أو لممرض محدد)
+=====================================================================
+-->
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NurseHub — منصة التمريض المنزلي في مصر</title>
+<meta name="description" content="ابحث عن أفضل ممرضي وممرضات التمريض المنزلي المعتمدين في محافظتك.">
+<style>
+/* =========================================================
+   NurseHub — Design system
+   Palette: clinical teal + warm amber, on a cool paper white.
+   Display face: Cairo — Body face: Tajawal
+   ========================================================= */
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@500;700;800&family=Tajawal:wght@400;500;700&display=swap');
+
+:root{
+  --bg:#F6F8F7; --surface:#FFFFFF; --surface-2:#EEF3F0; --ink:#12211C; --ink-soft:#4C5D57;
+  --line:#DCE6E0; --primary:#0E6F5C; --primary-ink:#083F34; --primary-soft:#E3F1EC;
+  --accent:#E8A33D; --accent-ink:#7A4E0E; --danger:#C6432E; --danger-soft:#FBE7E2; --gold:#D6A518;
+  --radius-s:10px; --radius-m:16px; --radius-l:24px;
+  --shadow-s:0 1px 2px rgba(18,33,28,.06), 0 1px 1px rgba(18,33,28,.04);
+  --shadow-m:0 10px 30px -12px rgba(14,111,92,.25); --header-h:72px;
+}
+[data-theme="dark"]{
+  --bg:#0B1512; --surface:#122019; --surface-2:#16261E; --ink:#EAF3EE; --ink-soft:#A7BAB2;
+  --line:#213229; --primary:#2FBF9C; --primary-ink:#DDF6EC; --primary-soft:#153029;
+  --accent:#F0B65B; --accent-ink:#3A2609; --danger:#E8695A; --danger-soft:#301714; --gold:#E6C15A;
+  --shadow-m:0 10px 30px -12px rgba(0,0,0,.5);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{ margin:0; background:var(--bg); color:var(--ink); font-family:'Tajawal', system-ui, sans-serif; direction:rtl; text-align:right; line-height:1.65; -webkit-font-smoothing:antialiased; transition:background .25s ease, color .25s ease; }
+h1,h2,h3,h4,.display{ font-family:'Cairo','Tajawal',sans-serif; font-weight:800; color:var(--ink); margin:0 0 .4em; letter-spacing:-.01em; }
+p{margin:0 0 1em}
+a{color:inherit; text-decoration:none}
+img{max-width:100%; display:block}
+button, input, select, textarea{ font-family:inherit; font-size:1rem; color:inherit; }
+::selection{ background:var(--accent); color:#1a1a1a; }
+@media (prefers-reduced-motion: reduce){ *{ animation-duration:.001ms !important; transition-duration:.001ms !important; } }
+.container{ max-width:1180px; margin:0 auto; padding:0 20px; }
+.visually-hidden{ position:absolute; width:1px;height:1px; overflow:hidden; clip:rect(0 0 0 0); }
+
+.site-header{ position:sticky; top:0; z-index:40; height:var(--header-h); display:flex; align-items:center; background:color-mix(in srgb, var(--surface) 88%, transparent); backdrop-filter:saturate(160%) blur(10px); border-bottom:1px solid var(--line); }
+.site-header .container{ display:flex; align-items:center; justify-content:space-between; gap:16px; }
+.brand{ display:flex; align-items:center; gap:10px; font-family:'Cairo',sans-serif; font-weight:800; font-size:1.35rem; color:var(--primary-ink); }
+.brand .mark{ width:38px; height:38px; }
+.nav-links{ display:flex; align-items:center; gap:6px; }
+.nav-links a{ padding:9px 14px; border-radius:999px; font-weight:700; font-size:.95rem; color:var(--ink-soft); transition:background .2s, color .2s; cursor:pointer; }
+.nav-links a:hover, .nav-links a.active{ background:var(--primary-soft); color:var(--primary-ink); }
+.header-actions{ display:flex; align-items:center; gap:10px; }
+.icon-btn{ width:40px; height:40px; border-radius:50%; border:1px solid var(--line); background:var(--surface); display:flex; align-items:center; justify-content:center; cursor:pointer; position:relative; transition:transform .15s ease, background .2s; flex-shrink:0; }
+.icon-btn:hover{ transform:translateY(-1px); background:var(--surface-2); }
+.icon-btn svg{ width:19px; height:19px; stroke:var(--ink); }
+.hamburger{ display:none; }
+.hamburger span{ display:block; width:18px; height:2px; background:var(--ink); border-radius:2px; position:relative; }
+.hamburger span::before, .hamburger span::after{ content:''; position:absolute; right:0; width:18px; height:2px; background:var(--ink); border-radius:2px; transition:transform .2s; }
+.hamburger span::before{ top:-6px; }
+.hamburger span::after{ top:6px; }
+
+.btn{ display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:12px 22px; border-radius:999px; border:none; cursor:pointer; font-weight:700; font-size:.98rem; transition:transform .15s ease, box-shadow .2s, background .2s, filter .2s; white-space:nowrap; }
+.btn:active{ transform:scale(.97); }
+.btn-primary{ background:var(--primary); color:#fff; box-shadow:var(--shadow-m); }
+.btn-primary:hover{ filter:brightness(1.06); }
+.btn-accent{ background:var(--accent); color:var(--accent-ink); }
+.btn-accent:hover{ filter:brightness(1.05); }
+.btn-outline{ background:transparent; color:var(--ink); border:1.5px solid var(--line); }
+.btn-outline:hover{ border-color:var(--primary); color:var(--primary-ink); }
+.btn-danger{ background:var(--danger-soft); color:var(--danger); }
+.btn-sm{ padding:8px 14px; font-size:.85rem; border-radius:999px; }
+.btn-block{ width:100%; }
+.btn[disabled]{ opacity:.55; cursor:not-allowed; }
+.link-btn{ background:none; border:none; color:var(--primary); font-weight:700; cursor:pointer; padding:0; }
+
+.hero{ position:relative; overflow:hidden; padding:56px 0 84px;
+  background: radial-gradient(720px 360px at 85% -10%, color-mix(in srgb, var(--accent) 28%, transparent), transparent 65%),
+              radial-gradient(900px 480px at -10% 10%, color-mix(in srgb, var(--primary) 22%, transparent), transparent 60%); }
+.hero-eyebrow{ display:inline-flex; align-items:center; gap:8px; padding:6px 14px; border-radius:999px; background:var(--primary-soft); color:var(--primary-ink); font-weight:700; font-size:.85rem; margin-bottom:18px; }
+.hero h1{ font-size:clamp(2.1rem, 4.4vw, 3.4rem); max-width:16ch; }
+.hero p.lead{ font-size:1.15rem; color:var(--ink-soft); max-width:56ch; }
+.hero-stats{ display:flex; gap:28px; margin-top:28px; flex-wrap:wrap; }
+.hero-stats .stat b{ font-family:'Cairo',sans-serif; font-size:1.6rem; color:var(--primary-ink); display:block; }
+.hero-stats .stat span{ color:var(--ink-soft); font-size:.9rem; }
+
+.search-panel{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-l); box-shadow:var(--shadow-m); padding:14px; margin-top:34px; display:grid; grid-template-columns:1.4fr 1fr 1fr auto; gap:10px; }
+.search-field{ display:flex; flex-direction:column; gap:4px; padding:8px 14px; border-radius:var(--radius-s); }
+.search-field:not(:last-child){ border-left:1px solid var(--line); }
+.search-field label{ font-size:.75rem; font-weight:700; color:var(--ink-soft); }
+.search-field input, .search-field select{ border:none; outline:none; background:transparent; font-weight:600; padding:2px 0; width:100%; }
+.search-panel .btn{ align-self:center; margin:6px; }
+@media (max-width:860px){ .search-panel{ grid-template-columns:1fr 1fr; } .search-field:not(:last-child){ border-left:none; border-bottom:1px solid var(--line); } .search-panel .btn{ grid-column:1/-1; } }
+
+.section{ padding:56px 0; }
+.section-head{ display:flex; align-items:flex-end; justify-content:space-between; margin-bottom:26px; gap:12px; flex-wrap:wrap; }
+.section-head h2{ font-size:1.65rem; }
+.section-head .sub{ color:var(--ink-soft); margin-top:-8px; }
+.tabs{ display:flex; gap:8px; background:var(--surface-2); padding:5px; border-radius:999px; }
+.tabs button{ border:none; background:transparent; padding:9px 18px; border-radius:999px; font-weight:700; cursor:pointer; color:var(--ink-soft); }
+.tabs button.active{ background:var(--surface); color:var(--primary-ink); box-shadow:var(--shadow-s); }
+
+.grid{ display:grid; gap:20px; grid-template-columns:repeat(auto-fill, minmax(260px,1fr)); }
+
+.nurse-card{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-m); overflow:hidden; transition:transform .2s ease, box-shadow .2s ease; position:relative; display:flex; flex-direction:column; cursor:pointer; }
+.nurse-card:hover{ transform:translateY(-4px); box-shadow:var(--shadow-m); }
+.nurse-card .photo-wrap{ position:relative; aspect-ratio:4/3; background:var(--surface-2); overflow:hidden; }
+.nurse-card .photo-wrap img{ width:100%; height:100%; object-fit:cover; }
+.nurse-card .body{ padding:16px; display:flex; flex-direction:column; gap:8px; flex:1; }
+.name-row{ display:flex; align-items:center; gap:6px; font-family:'Cairo',sans-serif; font-weight:700; font-size:1.05rem; }
+.meta-row{ display:flex; align-items:center; gap:6px; color:var(--ink-soft); font-size:.88rem; }
+.chips{ display:flex; gap:6px; flex-wrap:wrap; margin-top:2px; }
+.chip{ background:var(--surface-2); color:var(--ink-soft); font-size:.78rem; font-weight:700; padding:4px 10px; border-radius:999px; }
+.rating-row{ display:flex; align-items:center; gap:6px; font-weight:700; color:var(--gold); font-size:.92rem; }
+.rating-row .count{ color:var(--ink-soft); font-weight:500; }
+
+.trust-badge{ position:absolute; top:10px; right:10px; display:flex; align-items:center; gap:5px; background:linear-gradient(135deg, var(--primary), #0a5546); color:#fff; padding:5px 10px 5px 8px; border-radius:999px; font-size:.75rem; font-weight:800; box-shadow:0 4px 10px rgba(0,0,0,.18); }
+.trust-badge svg{ width:14px; height:14px; }
+
+.ad-slot{ border-radius:var(--radius-m); overflow:hidden; position:relative; background:var(--surface-2); min-height:120px; display:flex; align-items:center; border:1px solid var(--line); }
+.ad-slot img{ width:100%; height:100%; object-fit:cover; position:absolute; inset:0; }
+.ad-slot .ad-label{ position:absolute; top:8px; right:8px; background:rgba(0,0,0,.55); color:#fff; font-size:.7rem; padding:3px 9px; border-radius:6px; z-index:1; }
+.ad-slot .ad-body{ position:relative; z-index:1; padding:20px; color:#fff; text-shadow:0 1px 6px rgba(0,0,0,.5); }
+
+.card{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-m); padding:26px; box-shadow:var(--shadow-s); }
+.form-grid{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+@media (max-width:720px){ .form-grid{ grid-template-columns:1fr; } }
+.field{ display:flex; flex-direction:column; gap:6px; margin-bottom:16px; }
+.field.full{ grid-column:1/-1; }
+.field label{ font-weight:700; font-size:.92rem; }
+.field .hint{ font-size:.78rem; color:var(--ink-soft); }
+.field input, .field select, .field textarea{ border:1.5px solid var(--line); border-radius:var(--radius-s); padding:11px 14px; background:var(--surface); outline:none; transition:border-color .2s, box-shadow .2s; width:100%; }
+.field input:focus, .field select:focus, .field textarea:focus{ border-color:var(--primary); box-shadow:0 0 0 3px var(--primary-soft); }
+.field textarea{ resize:vertical; min-height:100px; }
+.checkbox-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:10px; }
+.checkbox-item{ display:flex; align-items:center; gap:8px; background:var(--surface-2); padding:9px 12px; border-radius:var(--radius-s); cursor:pointer; }
+.upload-box{ border:2px dashed var(--line); border-radius:var(--radius-m); padding:22px; text-align:center; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:8px; color:var(--ink-soft); }
+.upload-box img{ max-height:140px; border-radius:var(--radius-s); }
+.form-msg{ padding:12px 16px; border-radius:var(--radius-s); font-weight:700; margin-bottom:16px; display:none; }
+.form-msg.show{ display:block; }
+.form-msg.success{ background:var(--primary-soft); color:var(--primary-ink); }
+.form-msg.error{ background:var(--danger-soft); color:var(--danger); }
+.progress{ height:6px; background:var(--surface-2); border-radius:99px; overflow:hidden; margin-top:8px; }
+.progress > i{ display:block; height:100%; background:var(--primary); width:0%; transition:width .2s; }
+
+.profile-hero{ display:grid; grid-template-columns:220px 1fr; gap:28px; align-items:flex-start; }
+@media (max-width:760px){ .profile-hero{ grid-template-columns:1fr; } }
+.profile-photo{ width:100%; aspect-ratio:1; border-radius:var(--radius-l); overflow:hidden; box-shadow:var(--shadow-m); background:var(--surface-2); }
+.profile-photo img{ width:100%; height:100%; object-fit:cover; }
+.stars{ color:var(--gold); letter-spacing:2px; font-size:1.1rem; }
+.stat-pill{ display:inline-flex; align-items:center; gap:6px; background:var(--surface-2); padding:7px 13px; border-radius:999px; font-size:.85rem; font-weight:700; color:var(--ink-soft); }
+.pill-row{ display:flex; gap:8px; flex-wrap:wrap; margin:10px 0; }
+.contact-row{ display:flex; gap:10px; margin-top:18px; flex-wrap:wrap; }
+.review{ border-bottom:1px solid var(--line); padding:16px 0; }
+.review:last-child{ border-bottom:none; }
+.review .rname{ font-weight:800; font-family:'Cairo',sans-serif; }
+.review .rdate{ color:var(--ink-soft); font-size:.8rem; }
+
+.admin-shell{ display:grid; grid-template-columns:230px 1fr; min-height:70vh; }
+@media (max-width:900px){ .admin-shell{ grid-template-columns:1fr; } }
+.admin-side{ background:var(--surface); border-left:1px solid var(--line); padding:20px 14px; }
+.admin-side a{ display:flex; align-items:center; gap:10px; padding:11px 14px; border-radius:var(--radius-s); font-weight:700; color:var(--ink-soft); margin-bottom:4px; cursor:pointer; }
+.admin-side a.active, .admin-side a:hover{ background:var(--primary-soft); color:var(--primary-ink); }
+.admin-main{ padding:26px; }
+.stat-cards{ display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:16px; margin-bottom:26px; }
+.stat-card{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-m); padding:18px; }
+.stat-card b{ font-family:'Cairo',sans-serif; font-size:1.8rem; display:block; color:var(--primary-ink); }
+.table-wrap{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-m); overflow:auto; }
+table{ width:100%; border-collapse:collapse; }
+th, td{ padding:12px 14px; text-align:right; border-bottom:1px solid var(--line); font-size:.92rem; }
+th{ background:var(--surface-2); font-family:'Cairo',sans-serif; }
+tr:last-child td{ border-bottom:none; }
+.status-tag{ padding:3px 10px; border-radius:999px; font-size:.75rem; font-weight:800; }
+.status-tag.pending{ background:#FFF4DA; color:#8A5A00; }
+.status-tag.approved{ background:var(--primary-soft); color:var(--primary-ink); }
+.status-tag.blocked{ background:var(--danger-soft); color:var(--danger); }
+.row-actions{ display:flex; gap:6px; flex-wrap:wrap; }
+.modal-backdrop{ position:fixed; inset:0; background:rgba(10,20,16,.55); display:none; align-items:center; justify-content:center; z-index:100; padding:20px; }
+.modal-backdrop.show{ display:flex; }
+.modal{ background:var(--surface); border-radius:var(--radius-l); max-width:640px; width:100%; max-height:88vh; overflow:auto; padding:26px; }
+
+.gate-screen{ min-height:60vh; display:flex; align-items:center; justify-content:center; padding:24px; }
+.gate-card{ width:100%; max-width:380px; text-align:center; }
+.gate-icon{ width:56px; height:56px; margin:0 auto 14px; }
+
+.site-footer{ background:var(--surface); border-top:1px solid var(--line); padding:40px 0 24px; margin-top:40px; }
+.footer-grid{ display:flex; justify-content:space-between; flex-wrap:wrap; gap:24px; }
+.footer-links{ display:flex; gap:18px; color:var(--ink-soft); font-size:.9rem; flex-wrap:wrap; }
+.footer-bottom{ color:var(--ink-soft); font-size:.8rem; margin-top:22px; text-align:center; }
+.footer-secret{ opacity:.35; cursor:default; user-select:none; }
+
+.notif-item{ display:flex; gap:12px; padding:16px; border-radius:var(--radius-m); background:var(--surface); border:1px solid var(--line); margin-bottom:10px; }
+.notif-item .n-icon{ width:40px; height:40px; border-radius:50%; background:var(--primary-soft); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.notif-item .n-icon svg{ width:18px; height:18px; stroke:var(--primary-ink); }
+
+.empty-state{ text-align:center; padding:60px 20px; color:var(--ink-soft); }
+.empty-state svg{ width:52px; height:52px; margin-bottom:14px; opacity:.5; }
+.skeleton{ background:linear-gradient(90deg, var(--surface-2) 25%, var(--line) 37%, var(--surface-2) 63%); background-size:400% 100%; animation:sk 1.4s ease infinite; border-radius:var(--radius-m); }
+@keyframes sk{ 0%{background-position:100% 50%} 100%{background-position:0 50%} }
+
+.toast{ position:fixed; bottom:22px; right:22px; background:var(--ink); color:var(--bg); padding:13px 20px; border-radius:var(--radius-s); font-weight:700; z-index:200; box-shadow:var(--shadow-m); opacity:0; transform:translateY(10px); transition:all .25s ease; pointer-events:none; }
+.toast.show{ opacity:1; transform:translateY(0); }
+
+.star-input{ display:flex; gap:4px; font-size:1.6rem; cursor:pointer; }
+.star-input span{ color:var(--line); transition:color .15s; }
+.star-input span.active{ color:var(--gold); }
+
+.view{ display:none; }
+.view.active{ display:block; }
+
+/* ---------- Responsive: phone & small screens ---------- */
+@media (max-width:760px){
+  .site-header{ position:sticky; }
+  .nav-links{
+    display:none; position:absolute; top:100%; right:0; left:0;
+    flex-direction:column; align-items:stretch; gap:4px;
+    background:var(--surface); border-bottom:1px solid var(--line);
+    box-shadow:var(--shadow-m); padding:10px; z-index:39;
+  }
+  .nav-links.mobile-open{ display:flex; }
+  .nav-links a{ width:100%; border-radius:12px; padding:12px 14px; }
+  .hamburger{ display:flex; align-items:center; justify-content:center; }
+  .header-actions .btn-sm{ display:none; }
+  .container{ padding:0 16px; }
+  .hero{ padding:36px 0 56px; }
+  .hero-stats{ gap:18px; }
+  .search-panel{ padding:10px; }
+  .section{ padding:36px 0; }
+  .section-head{ align-items:flex-start; }
+  .profile-hero{ padding:18px; }
+  .contact-row .btn{ flex:1 1 auto; }
+  .admin-main{ padding:16px; }
+  .stat-cards{ grid-template-columns:1fr 1fr; }
+  .modal{ padding:18px; }
+  th, td{ padding:10px 8px; font-size:.82rem; }
+}
+@media (max-width:420px){
+  .stat-cards{ grid-template-columns:1fr; }
+  .hero-stats{ gap:14px 22px; }
+}
+</style>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="container">
+    <a href="#/" class="brand">
+      <svg class="mark" viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="12" fill="var(--primary)"/><path d="M20 10c-4 0-6.5 2.7-6.5 6.2 0 2.1 1.1 3.6 2.6 4.8-3.4 1.2-5.6 3.6-5.6 6.9V29h19v-1.1c0-3.3-2.2-5.7-5.6-6.9 1.5-1.2 2.6-2.7 2.6-4.8C26.5 12.7 24 10 20 10z" fill="#fff"/><path d="M17 17h6M20 14v6" stroke="var(--primary)" stroke-width="1.6" stroke-linecap="round"/></svg>
+      <span>NurseHub</span>
+    </a>
+    <nav class="nav-links" id="navLinks">
+      <a href="#/" data-route="/">الرئيسية</a>
+      <a href="#/search" data-route="/search">ابحث عن ممرض</a>
+      <a href="#/register" data-route="/register">انضم كممرض</a>
+      <a href="#/notifications" data-route="/notifications">الإشعارات</a>
+    </nav>
+    <div class="header-actions">
+      <button class="icon-btn" id="themeToggle" aria-label="تبديل الوضع الليلي"></button>
+      <a href="#/notifications" class="icon-btn" aria-label="الإشعارات">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+      </a>
+      <a href="#/register" class="btn btn-primary btn-sm">سجّل كممرض</a>
+      <button class="icon-btn hamburger" id="hamburgerBtn" aria-label="القائمة"><span></span></button>
+    </div>
+  </div>
+</header>
+
+<main id="viewport">
+
+  <!-- ============ HOME ============ -->
+  <section class="view" id="view-home">
+    <section class="hero">
+      <div class="container">
+        <span class="hero-eyebrow">🏠 رعاية تمريضية منزلية موثوقة</span>
+        <h1>ابحث عن ممرض منزلي تثق به، في دقائق</h1>
+        <p class="lead">NurseHub يجمع أفضل الكوادر التمريضية المعتمدة في كل محافظات مصر، مع تقييمات حقيقية من عملاء سابقين، لتختار براحة تامة.</p>
+        <div class="hero-stats">
+          <div class="stat"><b id="statNurses">—</b><span>ممرض وممرضة</span></div>
+          <div class="stat"><b id="statGov">26</b><span>محافظة</span></div>
+          <div class="stat"><b id="statRatings">—</b><span>تقييم من العملاء</span></div>
+        </div>
+        <form class="search-panel" id="heroSearch">
+          <div class="search-field"><label for="hq">الاسم / التخصص</label><input id="hq" type="text" placeholder="مثال: رعاية مسنين"></div>
+          <div class="search-field"><label for="hgov">المحافظة</label><select id="hgov"><option value="">الكل</option></select></div>
+          <div class="search-field"><label for="hcity">المدينة</label><input id="hcity" type="text" placeholder="مثال: المعادي"></div>
+          <button type="submit" class="btn btn-primary">🔍 بحث</button>
+        </form>
+      </div>
+    </section>
+
+    <div class="container">
+      <section class="section" id="adSectionTop" style="display:none">
+        <div class="grid" style="grid-template-columns:1fr" id="adSlotTop"></div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <div><h2>الأعلى تقييمًا</h2><p class="sub">ممرضون اختارهم العملاء بثقة</p></div>
+          <a href="#/search" class="link-btn">عرض الكل ←</a>
+        </div>
+        <div class="grid" id="topRatedGrid"></div>
+      </section>
+
+      <section class="section">
+        <div class="section-head"><div><h2>الممرضون الموثقون</h2><p class="sub">حاصلون على علامة التوثيق من فريق NurseHub</p></div></div>
+        <div class="grid" id="verifiedGrid"></div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <div><h2>أحدث المنضمين</h2><p class="sub">كوادر جديدة انضمت لمنصة NurseHub</p></div>
+          <a href="#/search" class="link-btn">عرض الكل ←</a>
+        </div>
+        <div class="grid" id="latestGrid"></div>
+      </section>
+    </div>
+  </section>
+
+  <!-- ============ REGISTER ============ -->
+  <section class="view" id="view-register">
+    <section class="section" style="padding-top:36px">
+      <div class="container" style="max-width:880px">
+        <h1>انضم إلى NurseHub كممرض/ممرضة</h1>
+        <p class="lead" style="color:var(--ink-soft)">أكمل بياناتك بدقة. لن يظهر ملفك للعامة إلا بعد مراجعة فريق NurseHub والموافقة عليه.</p>
+        <div class="form-msg" id="regFormMsg"></div>
+        <form class="card" id="regForm">
+          <div class="field full">
+            <label>الصورة الشخصية *</label>
+            <div class="upload-box" id="uploadBox">
+              <span id="uploadPlaceholder">📷 اضغط لاختيار صورة واضحة</span>
+              <img id="photoPreview" style="display:none">
+            </div>
+            <input type="file" id="photoInput" accept="image/*" class="visually-hidden">
+          </div>
+          <div class="form-grid">
+            <div class="field"><label>الاسم الثلاثي *</label><input required name="name" type="text" placeholder="مثال: منى أحمد سيد"></div>
+            <div class="field"><label>الرقم القومي *</label><input required name="nationalId" type="text" pattern="\d{14}" maxlength="14" placeholder="14 رقم"><span class="hint">🔒 لن يظهر إلا للمشرف فقط</span></div>
+            <div class="field"><label>رقم الهاتف *</label><input required name="phone" type="tel" placeholder="01xxxxxxxxx"></div>
+            <div class="field"><label>رقم واتساب *</label><input required name="whatsapp" type="tel" placeholder="01xxxxxxxxx"></div>
+            <div class="field"><label>السن *</label><input required name="age" type="number" min="18" max="75"></div>
+            <div class="field"><label>الجنس *</label><select required name="gender"><option value="">اختر</option><option>ذكر</option><option>أنثى</option></select></div>
+            <div class="field"><label>المحافظة *</label><select required name="governorate" id="regGovSelect"><option value="">اختر</option></select></div>
+            <div class="field"><label>المدينة *</label><input required name="city" type="text" placeholder="مثال: مدينة نصر"></div>
+            <div class="field"><label>محل الميلاد *</label><input required name="birthplace" type="text"></div>
+            <div class="field"><label>المؤهل *</label><input required name="qualification" type="text" placeholder="مثال: بكالوريوس تمريض"></div>
+            <div class="field"><label>سنة التخرج *</label><input required name="gradYear" type="number" min="1970" max="2026"></div>
+            <div class="field"><label>سنوات الخبرة *</label><input required name="experience" type="number" min="0" max="50"></div>
+            <div class="field full"><label>جهة العمل الحالية</label><input name="currentWork" type="text" placeholder="مثال: مستشفى دار الفؤاد (اختياري)"></div>
+            <div class="field full"><label>التخصص الرئيسي *</label><select required name="specialty" id="regSpecSelect"><option value="">اختر</option></select></div>
+          </div>
+          <div class="field full"><label>الخدمات التي تقدمها *</label><div class="checkbox-grid" id="servicesGrid"></div></div>
+          <div class="field full"><label>نبذة تعريفية *</label><textarea required name="bio" maxlength="600" placeholder="اكتب نبذة مختصرة عن خبرتك وأسلوبك في التعامل مع المرضى..."></textarea></div>
+          <div class="field full" style="display:flex; align-items:flex-start; gap:10px">
+            <input type="checkbox" id="agree" required style="margin-top:5px">
+            <label for="agree" style="font-weight:500">أقر بأن جميع البيانات المدخلة صحيحة، وأوافق على مراجعتها من قبل إدارة NurseHub قبل نشر ملفي.</label>
+          </div>
+          <div class="progress" id="uploadProgress" style="display:none"><i></i></div>
+          <button class="btn btn-primary btn-block" id="regSubmitBtn" type="submit" style="margin-top:10px">إرسال طلب التسجيل</button>
+        </form>
+      </div>
+    </section>
+  </section>
+
+  <!-- ============ PROFILE ============ -->
+  <section class="view" id="view-profile">
+    <section class="section" style="padding-top:36px">
+      <div class="container" style="max-width:960px">
+        <div id="pLoadingState"><div class="skeleton" style="height:320px; border-radius:24px"></div></div>
+        <div id="pNotFoundState" class="empty-state" style="display:none">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg>
+          <p>لم يتم العثور على هذا الملف، أو أنه لا يزال قيد المراجعة.</p>
+          <a href="#/search" class="btn btn-outline" style="margin-top:12px">تصفح الممرضين</a>
+        </div>
+        <div id="profileContent" style="display:none">
+          <div class="profile-hero card">
+            <div class="profile-photo"><img id="pPhoto" alt=""></div>
+            <div>
+              <div class="pill-row">
+                <span class="stat-pill" id="pVerified" style="display:none">✅ موثّق</span>
+                <span class="stat-pill">👁️ <span id="pVisits">0</span> زيارة</span>
+                <span class="stat-pill">⭐ <span id="pRatingCount">0</span> تقييم</span>
+              </div>
+              <h1 id="pName" style="margin-bottom:6px"></h1>
+              <div class="stars" id="pStars"></div>
+              <div class="meta-row" style="margin-top:10px">📍 <span id="pLocation"></span></div>
+              <div class="meta-row">🎓 <span id="pQual"></span> — <span id="pExp"></span> سنوات خبرة</div>
+              <div class="chips" id="pChips" style="margin-top:10px"></div>
+              <p style="margin-top:14px" id="pBio"></p>
+              <div class="contact-row">
+                <a class="btn btn-primary" id="callBtn" href="#">📞 اتصال</a>
+                <a class="btn btn-accent" id="whatsBtn" href="#" target="_blank">💬 واتساب</a>
+              </div>
+            </div>
+          </div>
+          <div class="card" id="notifBox" style="margin-top:22px; display:none"></div>
+          <div class="card" style="margin-top:22px">
+            <div class="section-head" style="margin-bottom:14px"><h2 style="font-size:1.3rem">التقييمات (<span id="revCount">0</span>)</h2></div>
+            <div id="ratingFormWrap">
+              <form id="ratingForm">
+                <div class="form-grid">
+                  <div class="field"><label>اسمك *</label><input required id="rName" type="text" placeholder="اكتب اسمك"></div>
+                  <div class="field"><label>تقييمك *</label>
+                    <div class="star-input" id="starInput">
+                      <span data-v="1">★</span><span data-v="2">★</span><span data-v="3">★</span><span data-v="4">★</span><span data-v="5">★</span>
+                    </div>
+                    <input type="hidden" id="rStars" value="0">
+                  </div>
+                </div>
+                <div class="field full"><label>تعليقك *</label><textarea required id="rComment" placeholder="شاركنا تجربتك مع هذا الممرض..."></textarea></div>
+                <button class="btn btn-primary" type="submit">إرسال التقييم</button>
+              </form>
+            </div>
+            <div id="alreadyRated" style="display:none" class="form-msg show success">لقد قمت بتقييم هذا الممرض من قبل، شكرًا لمشاركتك 🙏</div>
+            <div id="reviewsList" style="margin-top:22px"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </section>
+
+  <!-- ============ SEARCH ============ -->
+  <section class="view" id="view-search">
+    <section class="section" style="padding-top:36px">
+      <div class="container">
+        <h1>ابحث عن ممرض منزلي</h1>
+        <p class="lead" style="color:var(--ink-soft)">استخدم الفلاتر لتضييق نتائج البحث حسب احتياجك.</p>
+        <div class="card" style="margin-bottom:26px">
+          <form id="filterForm" class="form-grid">
+            <div class="field"><label>الاسم أو الكلمة المفتاحية</label><input id="fQ" type="text" placeholder="مثال: منى / رعاية مسنين"></div>
+            <div class="field"><label>المحافظة</label><select id="fGov"><option value="">الكل</option></select></div>
+            <div class="field"><label>المدينة</label><input id="fCity" type="text" placeholder="مثال: مدينة نصر"></div>
+            <div class="field"><label>التخصص</label><select id="fSpec"><option value="">الكل</option></select></div>
+            <div class="field full" style="display:flex; gap:10px">
+              <button class="btn btn-primary" type="submit">🔍 بحث</button>
+              <button class="btn btn-outline" type="button" id="clearBtn">مسح الفلاتر</button>
+            </div>
+          </form>
+        </div>
+        <div class="section-head">
+          <div><h2 style="font-size:1.2rem">نتائج البحث</h2></div>
+          <div class="tabs" id="sortTabs">
+            <button data-sort="rating" class="active">الأعلى تقييمًا</button>
+            <button data-sort="createdAt">الأحدث</button>
+            <button data-sort="visits">الأكثر زيارة</button>
+          </div>
+        </div>
+        <div class="grid" id="resultsGrid"></div>
+        <div style="text-align:center; margin-top:26px"><button class="btn btn-outline" id="loadMoreBtn" style="display:none">عرض المزيد</button></div>
+      </div>
+    </section>
+  </section>
+
+  <!-- ============ NOTIFICATIONS ============ -->
+  <section class="view" id="view-notifications">
+    <section class="section" style="padding-top:36px">
+      <div class="container" style="max-width:720px">
+        <div class="section-head">
+          <div><h1 style="font-size:1.8rem">مركز الإشعارات</h1><p class="sub" style="color:var(--ink-soft)">آخر التحديثات والإعلانات من فريق NurseHub</p></div>
+          <button class="btn btn-outline btn-sm" id="enablePush">🔔 تفعيل إشعارات الجوال</button>
+        </div>
+        <div id="notifList"></div>
+      </div>
+    </section>
+  </section>
+
+  <!-- ============ ADMIN ============ -->
+  <section class="view" id="view-admin">
+    <div class="gate-screen" id="gateScreen">
+      <div class="card gate-card">
+        <svg class="gate-icon" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="1.6"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+        <h2>لوحة إدارة NurseHub</h2>
+        <p style="color:var(--ink-soft); margin-bottom:20px">هذه الصفحة مخصصة للمشرفين فقط</p>
+        <form id="loginForm">
+          <div class="field"><input required type="email" id="adminEmail" placeholder="البريد الإلكتروني"></div>
+          <div class="field"><input required type="password" id="adminPass" placeholder="كلمة المرور"></div>
+          <button class="btn btn-primary btn-block" type="submit">دخول</button>
+        </form>
+        <p class="form-msg" id="loginMsg" style="margin-top:14px"></p>
+      </div>
+    </div>
+
+    <div class="admin-shell" id="adminShell" style="display:none">
+      <aside class="admin-side">
+        <div class="brand" style="margin-bottom:22px; padding:0 10px">
+          <svg class="mark" viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="12" fill="var(--primary)"/><path d="M20 10c-4 0-6.5 2.7-6.5 6.2 0 2.1 1.1 3.6 2.6 4.8-3.4 1.2-5.6 3.6-5.6 6.9V29h19v-1.1c0-3.3-2.2-5.7-5.6-6.9 1.5-1.2 2.6-2.7 2.6-4.8C26.5 12.7 24 10 20 10z" fill="#fff"/></svg>
+          <span>NurseHub</span>
+        </div>
+        <nav>
+          <a data-atab="overview" class="active">📊 نظرة عامة</a>
+          <a data-atab="pending">🕓 طلبات قيد المراجعة <span id="pendingCountTag"></span></a>
+          <a data-atab="nurses">👩‍⚕️ كل الممرضين</a>
+          <a data-atab="ads">📢 الإعلانات</a>
+          <a data-atab="notify">🔔 إرسال إشعار</a>
+        </nav>
+        <button class="btn btn-outline btn-block" id="logoutBtn" style="margin-top:30px">تسجيل الخروج</button>
+      </aside>
+
+      <main class="admin-main">
+        <section class="atab-panel" id="atab-overview">
+          <h2>نظرة عامة</h2>
+          <div class="stat-cards">
+            <div class="stat-card"><b id="ovNurses">—</b>عدد الممرضين المعتمدين</div>
+            <div class="stat-card"><b id="ovPending">—</b>طلبات قيد المراجعة</div>
+            <div class="stat-card"><b id="ovVisits">—</b>إجمالي الزيارات</div>
+            <div class="stat-card"><b id="ovRatings">—</b>إجمالي التقييمات</div>
+          </div>
+          <div class="card">
+            <h3 style="font-size:1.05rem">🔍 بحث سريع عن ممرض</h3>
+            <input type="text" id="quickSearch" placeholder="اكتب اسم الممرض أو المدينة..." style="width:100%; padding:12px 14px; border:1.5px solid var(--line); border-radius:10px; margin-top:8px">
+            <div id="quickSearchResults" style="margin-top:12px"></div>
+          </div>
+        </section>
+
+        <section class="atab-panel" id="atab-pending" style="display:none">
+          <h2>طلبات قيد المراجعة</h2>
+          <div class="table-wrap"><table>
+            <thead><tr><th>الصورة</th><th>الاسم</th><th>المحافظة</th><th>التخصص</th><th>تاريخ التسجيل</th><th>إجراءات</th></tr></thead>
+            <tbody id="pendingTableBody"></tbody>
+          </table></div>
+        </section>
+
+        <section class="atab-panel" id="atab-nurses" style="display:none">
+          <h2>كل الممرضين</h2>
+          <div class="table-wrap"><table>
+            <thead><tr><th>الصورة</th><th>الاسم</th><th>المحافظة</th><th>الحالة</th><th>التقييم</th><th>إجراءات</th></tr></thead>
+            <tbody id="nursesTableBody"></tbody>
+          </table></div>
+        </section>
+
+        <section class="atab-panel" id="atab-ads" style="display:none">
+          <div class="section-head"><h2>الإعلانات</h2><button class="btn btn-primary btn-sm" id="newAdBtn">+ إعلان جديد</button></div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>العنوان</th><th>الممرض</th><th>ينتهي في</th><th>الحالة</th><th>إجراءات</th></tr></thead>
+            <tbody id="adsTableBody"></tbody>
+          </table></div>
+        </section>
+
+        <section class="atab-panel" id="atab-notify" style="display:none">
+          <h2>إرسال إشعار</h2>
+          <div class="card" style="max-width:560px">
+            <form id="notifyForm">
+              <div class="field"><label>الجهة</label>
+                <select id="notifyTarget"><option value="all">جميع المستخدمين</option><option value="nurse">ممرض محدد</option></select>
+              </div>
+              <div class="field" id="notifyNurseIdWrap" style="display:none">
+                <label>معرّف الممرض (Nurse ID)</label><input id="notifyNurseId" type="text" placeholder="انسخه من صفحة كل الممرضين">
+              </div>
+              <div class="field"><label>عنوان الإشعار *</label><input required id="notifyTitle" type="text"></div>
+              <div class="field"><label>نص الإشعار *</label><textarea required id="notifyBody"></textarea></div>
+              <button class="btn btn-primary" type="submit">إرسال</button>
+            </form>
+          </div>
+          <h3 style="margin-top:30px; font-size:1.05rem">آخر الإشعارات المُرسلة</h3>
+          <div id="sentNotifList"></div>
+        </section>
+      </main>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="container">
+    <div class="footer-grid">
+      <div>
+        <div class="brand" style="margin-bottom:10px">
+          <svg class="mark" viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="12" fill="var(--primary)"/><path d="M20 10c-4 0-6.5 2.7-6.5 6.2 0 2.1 1.1 3.6 2.6 4.8-3.4 1.2-5.6 3.6-5.6 6.9V29h19v-1.1c0-3.3-2.2-5.7-5.6-6.9 1.5-1.2 2.6-2.7 2.6-4.8C26.5 12.7 24 10 20 10z" fill="#fff"/></svg>
+          <span>NurseHub</span>
+        </div>
+        <p style="max-width:340px; color:var(--ink-soft)">منصة تجمع أفضل ممرضي وممرضات التمريض المنزلي المعتمدين في مصر، لتسهيل الوصول إلى رعاية موثوقة أينما كنت.</p>
+      </div>
+      <div class="footer-links">
+        <a href="#/">الرئيسية</a><a href="#/search">البحث</a><a href="#/register">انضم كممرض</a><a href="#/notifications">الإشعارات</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      © <span id="year"></span> NurseHub — جميع الحقوق محفوظة.
+      <span class="footer-secret" id="secretMark">•</span>
+    </div>
+  </div>
+</footer>
+
+<!-- Edit nurse modal -->
+<div class="modal-backdrop" id="editModalBackdrop">
+  <div class="modal">
+    <div class="section-head"><h3>تعديل بيانات الممرض</h3><button class="icon-btn" id="closeEditModal">✕</button></div>
+    <form id="editForm" class="form-grid">
+      <div class="field"><label>الاسم</label><input name="name" type="text"></div>
+      <div class="field"><label>الهاتف</label><input name="phone" type="text"></div>
+      <div class="field"><label>واتساب</label><input name="whatsapp" type="text"></div>
+      <div class="field"><label>المحافظة</label><input name="governorate" type="text"></div>
+      <div class="field"><label>المدينة</label><input name="city" type="text"></div>
+      <div class="field"><label>سنوات الخبرة</label><input name="experience" type="number"></div>
+      <div class="field full"><label>نبذة تعريفية</label><textarea name="bio"></textarea></div>
+      <div class="field full"><label>الرقم القومي (مرئي للمشرف فقط)</label><div id="nationalIdDisplay" style="font-weight:800; letter-spacing:2px"></div></div>
+      <div class="field full" style="display:flex; gap:16px">
+        <label class="checkbox-item"><input type="checkbox" name="verified"> علامة التوثيق ✅</label>
+        <label class="checkbox-item"><input type="checkbox" name="blocked"> حظر الحساب 🚫</label>
+      </div>
+      <div class="field full"><button class="btn btn-primary btn-block" type="submit">حفظ التعديلات</button></div>
+    </form>
+  </div>
+</div>
+
+<!-- New ad modal -->
+<div class="modal-backdrop" id="adModalBackdrop">
+  <div class="modal">
+    <div class="section-head"><h3>إعلان جديد</h3><button class="icon-btn" id="closeAdModal">✕</button></div>
+    <form id="adForm">
+      <div class="field"><label>عنوان الإعلان *</label><input required name="title" type="text"></div>
+      <div class="field"><label>معرّف الممرض (Nurse ID) *</label><input required name="nurseId" type="text" placeholder="انسخه من جدول الممرضين"></div>
+      <div class="field"><label>رابط صورة الإعلان (اختياري)</label><input name="imageURL" type="url" placeholder="https://..."></div>
+      <div class="field"><label>تاريخ الانتهاء *</label><input required name="endDate" type="date"></div>
+      <button class="btn btn-primary btn-block" type="submit">إضافة الإعلان</button>
+    </form>
+  </div>
+</div>
+
+<script type="module">
+/* =========================================================
+   NurseHub — single-file build (Firebase v10 modular SDK)
+   ========================================================= */
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {
+  getFirestore, collection, doc, getDoc, getDocs, addDoc, setDoc, updateDoc,
+  deleteDoc, query, where, orderBy, limit, serverTimestamp, increment,
+  runTransaction, startAfter
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {
+  getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+// Note: Firebase Storage is intentionally NOT used. On many Firebase
+// projects Storage now requires the paid "Blaze" billing plan, so
+// NurseHub stores profile photos as compressed base64 strings directly
+// inside the Firestore document instead (see compressImageToBase64()).
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCqdRQTxIjhVcmprfHMYbmMPxlSobsxo7w",
+  authDomain: "students-699de.firebaseapp.com",
+  projectId: "students-699de",
+  storageBucket: "students-699de.firebasestorage.app",
+  messagingSenderId: "347273410609",
+  appId: "1:347273410609:web:e2e17f6a150bd90153bd10",
+  measurementId: "G-LPTBSCQJDX"
+};
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+
+async function getMessagingIfSupported(){
+  try{
+    const { getMessaging, isSupported } = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js");
+    const supported = await isSupported();
+    return supported ? getMessaging(app) : null;
+  }catch(e){ console.warn("FCM not available:", e); return null; }
+}
+
+/* ---------- Shared constants ---------- */
+const GOVERNORATES = [
+  "القاهرة","الجيزة","الإسكندرية","الدقهلية","الشرقية","المنوفية","القليوبية","الغربية",
+  "كفر الشيخ","دمياط","بورسعيد","الإسماعيلية","السويس","بني سويف","الفيوم","المنيا",
+  "أسيوط","سوهاج","قنا","الأقصر","أسوان","البحر الأحمر","الوادي الجديد","مطروح",
+  "شمال سيناء","جنوب سيناء"
+];
+const SPECIALTIES = [
+  "تمريض عام","رعاية مسنين","رعاية ما بعد العمليات","حقن ومحاليل","متابعة سكري وضغط",
+  "رعاية أطفال حديثي الولادة","عناية بالجروح والقسطرة","رعاية مرضى الشلل والحركة",
+  "رعاية نفاسية وأمومة","تمريض عناية مركزة منزلية"
+];
+const SERVICES = [
+  "حقن وريدية وعضلية","تركيب محاليل","قياس ضغط وسكر","تغيير ضمادات وجروح","رعاية قسطرة بولية",
+  "متابعة ما بعد العملية","رعاية كبار السن","رعاية أطفال حديثي الولادة","عمل غسيل كلوي منزلي (متابعة)","تغذية أنبوبية"
+];
+
+/* ---------- Small helpers ---------- */
+function escapeHtml(str=''){ return str.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+function starString(rating){ const r = Math.round(rating || 0); return '★★★★★☆☆☆☆☆'.slice(5-r, 10-r); }
+function timeAgo(date){
+  if(!date) return '';
+  const s = Math.floor((Date.now() - date.getTime())/1000);
+  const units = [[31536000,'سنة'],[2592000,'شهر'],[86400,'يوم'],[3600,'ساعة'],[60,'دقيقة']];
+  for(const [sec,label] of units){ const v = Math.floor(s/sec); if(v>=1) return `منذ ${v} ${label}`; }
+  return 'الآن';
+}
+function getDeviceId(){
+  let id = localStorage.getItem('nh_device_id');
+  if(!id){ id = 'dev_' + crypto.randomUUID(); localStorage.setItem('nh_device_id', id); }
+  return id;
+}
+function hasRated(nurseId){ return !!(JSON.parse(localStorage.getItem('nh_rated')||'{}')[nurseId]); }
+function markRated(nurseId){ const r = JSON.parse(localStorage.getItem('nh_rated')||'{}'); r[nurseId]=true; localStorage.setItem('nh_rated', JSON.stringify(r)); }
+
+/* Resize + compress an image file in the browser and return a base64
+   JPEG data URL small enough to store as a normal Firestore field
+   (no Firebase Storage needed). Shrinks dimensions first, then lowers
+   JPEG quality if still too large, until it fits under maxBytes. */
+function compressImageToBase64(file, { maxDim = 480, maxBytes = 350 * 1024 } = {}){
+  return new Promise((resolve, reject)=>{
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = ()=>{
+      URL.revokeObjectURL(url);
+      let { width, height } = img;
+      if(width > height && width > maxDim){ height = Math.round(height * (maxDim/width)); width = maxDim; }
+      else if(height > maxDim){ width = Math.round(width * (maxDim/height)); height = maxDim; }
+      const canvas = document.createElement('canvas');
+      canvas.width = width; canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+
+      let quality = 0.78;
+      let dataUrl = canvas.toDataURL('image/jpeg', quality);
+      let guard = 0;
+      while(dataUrl.length * 0.75 > maxBytes && quality > 0.3 && guard < 8){
+        quality -= 0.1;
+        dataUrl = canvas.toDataURL('image/jpeg', quality);
+        guard++;
+      }
+      resolve(dataUrl);
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
+let toastTimer;
+function toast(msg){
+  let el = document.getElementById('nhToast');
+  if(!el){ el = document.createElement('div'); el.id='nhToast'; el.className='toast'; document.body.appendChild(el); }
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(()=> el.classList.remove('show'), 3200);
+}
+
+function emptyState(msg){
+  return `<div class="empty-state" style="grid-column:1/-1">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="7"/><path d="M21 21l-3.5-3.5"/></svg>
+    <p>${msg}</p></div>`;
+}
+function nurseCard(n){
+  const photo = n.photoURL || 'https://placehold.co/400x300/EEF3F0/4C5D57?text=NurseHub';
+  return `
+  <a class="nurse-card" href="#/profile?id=${n.id}">
+    <div class="photo-wrap">
+      <img src="${photo}" alt="${escapeHtml(n.name||'')}" loading="lazy">
+      ${n.verified ? `<span class="trust-badge"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l7 4v6c0 5-3.4 8.4-7 10-3.6-1.6-7-5-7-10V6l7-4z"/></svg> موثّق</span>` : ''}
+    </div>
+    <div class="body">
+      <div class="name-row">${escapeHtml(n.name||'')}</div>
+      <div class="meta-row">📍 ${escapeHtml(n.governorate||'')}${n.city ? ' - '+escapeHtml(n.city) : ''}</div>
+      <div class="rating-row">${starString(n.rating)} <span class="count">(${n.ratingCount||0})</span></div>
+      <div class="chips">${(n.services||[]).slice(0,2).map(s=>`<span class="chip">${escapeHtml(s)}</span>`).join('')}</div>
+    </div>
+  </a>`;
+}
+
+/* ---------- Theme ---------- */
+const SUN_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4 12H2M22 12h-2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>`;
+const MOON_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
+function updateThemeIcon(theme){ document.getElementById('themeToggle').innerHTML = theme==='dark' ? SUN_ICON : MOON_ICON; }
+function initTheme(){
+  const saved = localStorage.getItem('nh_theme');
+  const theme = saved || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  document.documentElement.setAttribute('data-theme', theme);
+  updateThemeIcon(theme);
+}
+function toggleTheme(){
+  const cur = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+  const next = cur === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  localStorage.setItem('nh_theme', next);
+  updateThemeIcon(next);
+}
+initTheme();
+document.getElementById('themeToggle').addEventListener('click', toggleTheme);
+document.getElementById('year').textContent = new Date().getFullYear();
+
+/* ---------- Mobile nav ---------- */
+const navLinksEl = document.getElementById('navLinks');
+document.getElementById('hamburgerBtn').addEventListener('click', ()=>{
+  navLinksEl.classList.toggle('mobile-open');
+});
+navLinksEl.querySelectorAll('a').forEach(a => a.addEventListener('click', ()=> navLinksEl.classList.remove('mobile-open')));
+
+/* ---------- Hidden admin gate (5 taps on footer dot) ---------- */
+(function(){
+  const mark = document.getElementById('secretMark');
+  let taps = 0, tapTimer;
+  mark.addEventListener('click', ()=>{
+    taps++;
+    clearTimeout(tapTimer);
+    tapTimer = setTimeout(()=> taps = 0, 1500);
+    if(taps >= 5){ taps = 0; location.hash = '#/admin'; }
+  });
+})();
+
+/* =========================================================
+   ROUTER
+   ========================================================= */
+const VIEWS = ['home','register','profile','search','notifications','admin'];
+function parseHash(){
+  const raw = location.hash.replace(/^#/, '') || '/';
+  const [path, qs] = raw.split('?');
+  const params = new URLSearchParams(qs || '');
+  const route = path === '/' ? 'home' : path.replace('/', '');
+  return { route: VIEWS.includes(route) ? route : 'home', params };
+}
+function setActiveNav(route){
+  document.querySelectorAll('#navLinks a').forEach(a=>{
+    const r = a.dataset.route === '/' ? 'home' : a.dataset.route.replace('/', '');
+    a.classList.toggle('active', r === route);
+  });
+}
+function router(){
+  const { route, params } = parseHash();
+  VIEWS.forEach(v => document.getElementById('view-'+v).classList.remove('active'));
+  document.getElementById('view-'+route).classList.add('active');
+  setActiveNav(route);
+  window.scrollTo({ top:0, behavior:'instant' in window ? 'instant' : 'auto' });
+
+  if(route === 'home') initHome();
+  else if(route === 'register') initRegisterOnce();
+  else if(route === 'profile') initProfile(params.get('id'));
+  else if(route === 'search') initSearch(params);
+  else if(route === 'notifications') initNotifications();
+  else if(route === 'admin') initAdmin();
+}
+window.addEventListener('hashchange', router);
+
+/* =========================================================
+   HOME
+   ========================================================= */
+let homeLoaded = false;
+async function initHome(){
+  const govSelect = document.getElementById('hgov');
+  if(!govSelect.dataset.filled){
+    GOVERNORATES.forEach(g => govSelect.insertAdjacentHTML('beforeend', `<option>${g}</option>`));
+    govSelect.dataset.filled = '1';
+    document.getElementById('heroSearch').addEventListener('submit', (e)=>{
+      e.preventDefault();
+      const q = document.getElementById('hq').value.trim();
+      const gov = document.getElementById('hgov').value;
+      const city = document.getElementById('hcity').value.trim();
+      const p = new URLSearchParams();
+      if(q) p.set('q', q); if(gov) p.set('gov', gov); if(city) p.set('city', city);
+      location.hash = '#/search?' + p.toString();
+    });
+  }
+  if(homeLoaded) return;
+  homeLoaded = true;
+
+  ['topRatedGrid','verifiedGrid','latestGrid'].forEach(id=>{
+    document.getElementById(id).innerHTML = `<div class="skeleton" style="height:280px"></div><div class="skeleton" style="height:280px"></div><div class="skeleton" style="height:280px"></div>`;
+  });
+
+  loadHomeStats();
+  loadHomeAds();
+  loadHomeSection('topRatedGrid', [where('approved','==',true), where('blocked','==',false), orderBy('rating','desc'), limit(6)]);
+  loadHomeSection('verifiedGrid', [where('approved','==',true), where('blocked','==',false), where('verified','==',true), limit(6)]);
+  loadHomeSection('latestGrid', [where('approved','==',true), where('blocked','==',false), orderBy('createdAt','desc'), limit(6)]);
+}
+async function loadHomeSection(gridId, constraints){
+  const grid = document.getElementById(gridId);
+  try{
+    const snap = await getDocs(query(collection(db,'nurses'), ...constraints));
+    grid.innerHTML = snap.empty ? emptyState('لا يوجد ممرضون بعد في هذا القسم.') : snap.docs.map(d=>nurseCard({id:d.id,...d.data()})).join('');
+  }catch(err){ console.error(err); grid.innerHTML = emptyState('تعذر تحميل البيانات حاليًا.'); }
+}
+async function loadHomeStats(){
+  try{
+    const snap = await getDocs(query(collection(db,'nurses'), where('approved','==',true)));
+    document.getElementById('statNurses').textContent = snap.size;
+    let totalRatings = 0;
+    snap.forEach(d => totalRatings += (d.data().ratingCount||0));
+    document.getElementById('statRatings').textContent = totalRatings;
+  }catch(e){ console.error(e); }
+}
+async function loadHomeAds(){
+  try{
+    const now = new Date();
+    const snap = await getDocs(query(collection(db,'ads'), where('active','==',true)));
+    const live = snap.docs.filter(d=>{ const a=d.data(); const end=a.endDate?.toDate?a.endDate.toDate():new Date(a.endDate); return !end || end>now; });
+    if(!live.length) return;
+    const a = live[0].data();
+    document.getElementById('adSectionTop').style.display = '';
+    document.getElementById('adSlotTop').innerHTML = `
+      <a class="ad-slot" href="#/profile?id=${a.nurseId||''}" style="min-height:160px">
+        ${a.imageURL ? `<img src="${a.imageURL}" alt="">` : ''}
+        <span class="ad-label">إعلان</span>
+        <div class="ad-body"><h3 style="margin:0;color:#fff">${escapeHtml(a.title||'')}</h3></div>
+      </a>`;
+  }catch(e){ console.error(e); }
+}
+
+/* =========================================================
+   REGISTER
+   ========================================================= */
+let registerInitialized = false;
+function initRegisterOnce(){
+  if(registerInitialized) return;
+  registerInitialized = true;
+
+  const govSelect = document.getElementById('regGovSelect');
+  GOVERNORATES.forEach(g => govSelect.insertAdjacentHTML('beforeend', `<option>${g}</option>`));
+  const specSelect = document.getElementById('regSpecSelect');
+  SPECIALTIES.forEach(s => specSelect.insertAdjacentHTML('beforeend', `<option>${s}</option>`));
+  const servicesGrid = document.getElementById('servicesGrid');
+  SERVICES.forEach(s => servicesGrid.insertAdjacentHTML('beforeend', `<label class="checkbox-item"><input type="checkbox" name="services" value="${s}"> ${s}</label>`));
+
+  const uploadBox = document.getElementById('uploadBox');
+  const photoInput = document.getElementById('photoInput');
+  const photoPreview = document.getElementById('photoPreview');
+  const uploadPlaceholder = document.getElementById('uploadPlaceholder');
+  let photoFile = null;
+
+  uploadBox.addEventListener('click', ()=> photoInput.click());
+  photoInput.addEventListener('change', ()=>{
+    const file = photoInput.files[0];
+    if(!file) return;
+    if(file.size > 5*1024*1024){ toast('حجم الصورة يجب ألا يتجاوز 5 ميجابايت'); return; }
+    photoFile = file;
+    photoPreview.src = URL.createObjectURL(file);
+    photoPreview.style.display = 'block';
+    uploadPlaceholder.style.display = 'none';
+  });
+
+  const formMsg = document.getElementById('regFormMsg');
+  function showMsg(text, kind){ formMsg.textContent = text; formMsg.className = `form-msg show ${kind}`; }
+
+  document.getElementById('regForm').addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const form = e.target;
+    const submitBtn = document.getElementById('regSubmitBtn');
+    const services = [...form.querySelectorAll('input[name="services"]:checked')].map(c=>c.value);
+    if(services.length === 0){ showMsg('من فضلك اختر خدمة واحدة على الأقل.', 'error'); return; }
+    if(!photoFile){ showMsg('من فضلك أضف صورتك الشخصية.', 'error'); return; }
+    const nationalId = form.nationalId.value.trim();
+    if(!/^\d{14}$/.test(nationalId)){ showMsg('الرقم القومي يجب أن يتكون من 14 رقمًا.', 'error'); return; }
+
+    submitBtn.disabled = true; submitBtn.textContent = 'جاري الإرسال...';
+    const progressWrap = document.getElementById('uploadProgress');
+    progressWrap.style.display = 'block';
+    progressWrap.querySelector('i').style.width = '15%';
+
+    try{
+      // Compress the photo in the browser and store it as base64 —
+      // no Firebase Storage bucket required.
+      const photoURL = await compressImageToBase64(photoFile);
+      progressWrap.querySelector('i').style.width = '70%';
+
+      const nurseRef = await addDoc(collection(db,'nurses'), {
+        name: form.name.value.trim(), phone: form.phone.value.trim(), whatsapp: form.whatsapp.value.trim(),
+        age: Number(form.age.value), gender: form.gender.value, governorate: form.governorate.value,
+        city: form.city.value.trim(), birthplace: form.birthplace.value.trim(), qualification: form.qualification.value.trim(),
+        gradYear: Number(form.gradYear.value), currentWork: form.currentWork.value.trim(), experience: Number(form.experience.value),
+        specialty: form.specialty.value, services, bio: form.bio.value.trim(), photoURL,
+        approved: false, verified: false, blocked: false, rating: 0, ratingCount: 0, visits: 0,
+        createdAt: serverTimestamp(),
+      });
+      progressWrap.querySelector('i').style.width = '90%';
+
+      await setDoc(doc(db,'nurses_private', nurseRef.id), { nationalId, createdAt: serverTimestamp() });
+      progressWrap.querySelector('i').style.width = '100%';
+
+      showMsg('تم إرسال طلبك بنجاح ✅ سيتم مراجعته والموافقة عليه قريبًا من قبل الإدارة.', 'success');
+      form.reset();
+      photoPreview.style.display = 'none';
+      uploadPlaceholder.style.display = 'block';
+      submitBtn.textContent = 'تم الإرسال';
+    }catch(err){
+      console.error(err);
+      if(err?.code === 'resource-exhausted' || /longer than/i.test(err?.message||'')){
+        showMsg('الصورة كبيرة جدًا حتى بعد الضغط. جرّب صورة أخرى أصغر حجمًا.', 'error');
+      }else{
+        showMsg('حدث خطأ أثناء إرسال البيانات. حاول مرة أخرى.', 'error');
+      }
+      submitBtn.disabled = false; submitBtn.textContent = 'إرسال طلب التسجيل';
+      progressWrap.style.display = 'none';
+    }
+  });
+}
+
+/* =========================================================
+   PROFILE
+   ========================================================= */
+async function initProfile(nurseId){
+  document.getElementById('pLoadingState').style.display = 'block';
+  document.getElementById('pNotFoundState').style.display = 'none';
+  document.getElementById('profileContent').style.display = 'none';
+
+  if(!nurseId){ showProfileNotFound(); return; }
+  try{
+    const nurseRef = doc(db,'nurses', nurseId);
+    const snap = await getDoc(nurseRef);
+    if(!snap.exists() || snap.data().approved !== true || snap.data().blocked === true){ showProfileNotFound(); return; }
+    const n = snap.data();
+    renderProfile(nurseId, n);
+    updateDoc(nurseRef, { visits: increment(1) }).catch(()=>{});
+    loadReviews(nurseId);
+  }catch(err){ console.error(err); showProfileNotFound(); }
+}
+function showProfileNotFound(){
+  document.getElementById('pLoadingState').style.display = 'none';
+  document.getElementById('pNotFoundState').style.display = 'block';
+}
+function renderProfile(id, n){
+  document.getElementById('pLoadingState').style.display = 'none';
+  document.getElementById('profileContent').style.display = 'block';
+  document.getElementById('pPhoto').src = n.photoURL || 'https://placehold.co/400x400/EEF3F0/4C5D57?text=NurseHub';
+  document.getElementById('pName').textContent = n.name || '';
+  document.getElementById('pStars').textContent = starString(n.rating);
+  document.getElementById('pRatingCount').textContent = n.ratingCount || 0;
+  document.getElementById('pVisits').textContent = (n.visits||0) + 1;
+  document.getElementById('pLocation').textContent = `${n.governorate||''}${n.city ? ' - '+n.city : ''}`;
+  document.getElementById('pQual').textContent = n.qualification || '';
+  document.getElementById('pExp').textContent = n.experience ?? '—';
+  document.getElementById('pBio').textContent = n.bio || '';
+  document.getElementById('pVerified').style.display = n.verified ? 'inline-flex' : 'none';
+  document.getElementById('pChips').innerHTML = (n.services||[]).map(s=>`<span class="chip">${escapeHtml(s)}</span>`).join('') + (n.specialty ? `<span class="chip">${escapeHtml(n.specialty)}</span>` : '');
+  document.getElementById('callBtn').href = `tel:${n.phone||''}`;
+  const waNumber = (n.whatsapp||'').replace(/^0/, '20').replace(/\D/g,'');
+  document.getElementById('whatsBtn').href = `https://wa.me/${waNumber}`;
+
+  document.getElementById('ratingFormWrap').style.display = hasRated(id) ? 'none' : 'block';
+  document.getElementById('alreadyRated').style.display = hasRated(id) ? 'block' : 'none';
+
+  setupStarInput();
+  setupRatingForm(id);
+  loadTargetedNotifications(id);
+}
+function setupStarInput(){
+  const stars = document.querySelectorAll('#starInput span');
+  const hidden = document.getElementById('rStars');
+  hidden.value = 0;
+  stars.forEach(s=>{ s.classList.remove('active'); s.onclick = ()=>{ const v = Number(s.dataset.v); hidden.value = v; stars.forEach(st => st.classList.toggle('active', Number(st.dataset.v) <= v)); }; });
+}
+function setupRatingForm(nurseId){
+  const form = document.getElementById('ratingForm');
+  form.onsubmit = async (e)=>{
+    e.preventDefault();
+    const stars = Number(document.getElementById('rStars').value);
+    const name = document.getElementById('rName').value.trim();
+    const comment = document.getElementById('rComment').value.trim();
+    if(stars < 1){ toast('من فضلك اختر عدد النجوم'); return; }
+    if(!name || !comment){ toast('من فضلك أكمل جميع الحقول'); return; }
+    if(hasRated(nurseId)){ toast('لقد قمت بتقييم هذا الممرض من قبل'); return; }
+
+    const btn = e.target.querySelector('button[type="submit"]');
+    btn.disabled = true; btn.textContent = 'جاري الإرسال...';
+    try{
+      await addDoc(collection(db,'ratings'), { nurseId, name, stars, comment, deviceId: getDeviceId(), createdAt: serverTimestamp() });
+      const nurseRef = doc(db,'nurses', nurseId);
+      await runTransaction(db, async (tx)=>{
+        const fresh = await tx.get(nurseRef);
+        const data = fresh.data();
+        const newCount = (data.ratingCount||0) + 1;
+        const newAvg = (((data.rating||0) * (data.ratingCount||0)) + stars) / newCount;
+        tx.update(nurseRef, { rating: newAvg, ratingCount: newCount });
+      });
+      markRated(nurseId);
+      toast('شكرًا لتقييمك ✅');
+      document.getElementById('ratingFormWrap').style.display = 'none';
+      document.getElementById('alreadyRated').style.display = 'block';
+      loadReviews(nurseId);
+    }catch(err){ console.error(err); toast('حدث خطأ، حاول مرة أخرى'); btn.disabled = false; btn.textContent = 'إرسال التقييم'; }
+  };
+}
+async function loadReviews(nurseId){
+  const list = document.getElementById('reviewsList');
+  try{
+    const snap = await getDocs(query(collection(db,'ratings'), where('nurseId','==',nurseId), orderBy('createdAt','desc')));
+    document.getElementById('revCount').textContent = snap.size;
+    if(snap.empty){ list.innerHTML = `<p style="color:var(--ink-soft)">لا توجد تقييمات بعد. كن أول من يقيّم!</p>`; return; }
+    list.innerHTML = snap.docs.map(d=>{
+      const r = d.data();
+      const date = r.createdAt?.toDate ? r.createdAt.toDate() : null;
+      return `<div class="review">
+        <div class="rname">${escapeHtml(r.name)} <span class="stars" style="font-size:.85rem">${starString(r.stars)}</span></div>
+        <div class="rdate">${date?timeAgo(date):''}</div>
+        <p style="margin-top:6px">${escapeHtml(r.comment)}</p></div>`;
+    }).join('');
+  }catch(err){ console.error(err); list.innerHTML = `<p style="color:var(--ink-soft)">تعذر تحميل التقييمات.</p>`; }
+}
+async function loadTargetedNotifications(nurseId){
+  try{
+    const snap = await getDocs(query(collection(db,'notifications'), where('target','==',nurseId), orderBy('createdAt','desc')));
+    const box = document.getElementById('notifBox');
+    if(snap.empty){ box.style.display = 'none'; return; }
+    box.style.display = 'block';
+    box.innerHTML = `<h3 style="font-size:1.1rem">📢 آخر تحديثات هذا الممرض</h3>` +
+      snap.docs.slice(0,3).map(d=>{ const n = d.data(); return `<div class="notif-item"><div class="n-icon">🔔</div><div><b>${escapeHtml(n.title||'')}</b><p style="margin:4px 0 0">${escapeHtml(n.body||'')}</p></div></div>`; }).join('');
+  }catch(err){ console.error(err); }
+}
+
+/* =========================================================
+   SEARCH
+   ========================================================= */
+let searchInitialized = false;
+let currentSort = 'rating';
+let lastDoc = null;
+const PAGE_SIZE = 9;
+
+function initSearch(params){
+  if(!searchInitialized){
+    searchInitialized = true;
+    const fGov = document.getElementById('fGov');
+    GOVERNORATES.forEach(g => fGov.insertAdjacentHTML('beforeend', `<option>${g}</option>`));
+    const fSpec = document.getElementById('fSpec');
+    SPECIALTIES.forEach(s => fSpec.insertAdjacentHTML('beforeend', `<option>${s}</option>`));
+
+    document.getElementById('filterForm').addEventListener('submit', (e)=>{ e.preventDefault(); runSearch(true); });
+    document.getElementById('clearBtn').addEventListener('click', ()=>{ document.getElementById('filterForm').reset(); runSearch(true); });
+    document.getElementById('loadMoreBtn').addEventListener('click', ()=> runSearch(false));
+    document.querySelectorAll('#sortTabs button').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        document.querySelectorAll('#sortTabs button').forEach(b=>b.classList.remove('active'));
+        btn.classList.add('active');
+        currentSort = btn.dataset.sort;
+        runSearch(true);
+      });
+    });
+  }
+  document.getElementById('fQ').value = params.get('q') || '';
+  document.getElementById('fGov').value = params.get('gov') || '';
+  document.getElementById('fCity').value = params.get('city') || '';
+  document.getElementById('fSpec').value = params.get('spec') || '';
+  runSearch(true);
+}
+
+async function runSearch(reset=true){
+  const grid = document.getElementById('resultsGrid');
+  const loadMoreBtn = document.getElementById('loadMoreBtn');
+  if(reset){ grid.innerHTML = `<div class="skeleton" style="height:280px"></div><div class="skeleton" style="height:280px"></div><div class="skeleton" style="height:280px"></div>`; lastDoc = null; }
+
+  const gov = document.getElementById('fGov').value;
+  const spec = document.getElementById('fSpec').value;
+
+  try{
+    const constraints = [where('approved','==',true), where('blocked','==',false)];
+    if(gov) constraints.push(where('governorate','==',gov));
+    if(spec) constraints.push(where('specialty','==',spec));
+    constraints.push(orderBy(currentSort,'desc'));
+    if(lastDoc) constraints.push(startAfter(lastDoc));
+    constraints.push(limit(PAGE_SIZE));
+
+    const snap = await getDocs(query(collection(db,'nurses'), ...constraints));
+    let docs = snap.docs;
+
+    const qText = document.getElementById('fQ').value.trim().toLowerCase();
+    const cityText = document.getElementById('fCity').value.trim().toLowerCase();
+    let items = docs.map(d=>({id:d.id, ...d.data()}));
+    if(qText) items = items.filter(n => (n.name||'').toLowerCase().includes(qText) || (n.specialty||'').toLowerCase().includes(qText) || (n.services||[]).some(s=>s.toLowerCase().includes(qText)));
+    if(cityText) items = items.filter(n => (n.city||'').toLowerCase().includes(cityText));
+
+    if(docs.length) lastDoc = docs[docs.length-1];
+    loadMoreBtn.style.display = docs.length === PAGE_SIZE ? 'inline-flex' : 'none';
+
+    if(reset) grid.innerHTML = items.length ? items.map(nurseCard).join('') : emptyState('لا توجد نتائج مطابقة لبحثك.');
+    else if(items.length) grid.insertAdjacentHTML('beforeend', items.map(nurseCard).join(''));
+  }catch(err){ console.error(err); grid.innerHTML = emptyState('تعذر تحميل النتائج حاليًا.'); }
+}
+
+/* =========================================================
+   NOTIFICATIONS
+   ========================================================= */
+let notifPushBound = false;
+async function initNotifications(){
+  if(!notifPushBound){
+    notifPushBound = true;
+    document.getElementById('enablePush').addEventListener('click', async ()=>{
+      try{
+        if(!('Notification' in window)){ toast('المتصفح لا يدعم الإشعارات'); return; }
+        const perm = await Notification.requestPermission();
+        if(perm !== 'granted'){ toast('لم يتم منح إذن الإشعارات'); return; }
+        const messaging = await getMessagingIfSupported();
+        if(!messaging){ toast('تم تفعيل الإذن، لكن الإشعارات الفورية تتطلب إعداد VAPID key من مطوّر الموقع.'); return; }
+        toast('تم تفعيل الإشعارات بنجاح ✅');
+      }catch(err){ console.error(err); toast('تعذر تفعيل الإشعارات'); }
+    });
+  }
+  const list = document.getElementById('notifList');
+  list.innerHTML = `<div class="skeleton" style="height:80px; margin-bottom:10px"></div><div class="skeleton" style="height:80px; margin-bottom:10px"></div><div class="skeleton" style="height:80px"></div>`;
+  try{
+    const snap = await getDocs(query(collection(db,'notifications'), where('target','==','all'), orderBy('createdAt','desc'), limit(30)));
+    if(snap.empty){
+      list.innerHTML = `<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><p>لا توجد إشعارات حتى الآن.</p></div>`;
+      return;
+    }
+    list.innerHTML = snap.docs.map(d=>{
+      const n = d.data(); const date = n.createdAt?.toDate ? n.createdAt.toDate() : null;
+      return `<div class="notif-item"><div class="n-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></div>
+        <div><b>${escapeHtml(n.title||'')}</b><p style="margin:4px 0 0">${escapeHtml(n.body||'')}</p><div style="color:var(--ink-soft); font-size:.8rem; margin-top:6px">${date?timeAgo(date):''}</div></div></div>`;
+    }).join('');
+  }catch(err){ console.error(err); list.innerHTML = `<div class="empty-state"><p>تعذر تحميل الإشعارات حاليًا.</p></div>`; }
+}
+
+/* =========================================================
+   ADMIN
+   ========================================================= */
+let adminBound = false;
+let adminAuthed = false;
+let adminDataLoaded = false;
+
+function initAdmin(){
+  if(!adminBound){
+    adminBound = true;
+    bindAdminEvents();
+    onAuthStateChanged(auth, (user)=>{
+      adminAuthed = !!user;
+      renderAdminGate();
+      if(user && document.getElementById('view-admin').classList.contains('active') && !adminDataLoaded){
+        adminDataLoaded = true;
+        loadOverview(); loadPending(); loadAllNurses(); loadAds(); loadSentNotifications();
+      }
+    });
+  }
+  renderAdminGate();
+  if(adminAuthed && !adminDataLoaded){
+    adminDataLoaded = true;
+    loadOverview(); loadPending(); loadAllNurses(); loadAds(); loadSentNotifications();
+  }
+}
+function renderAdminGate(){
+  document.getElementById('gateScreen').style.display = adminAuthed ? 'none' : 'flex';
+  document.getElementById('adminShell').style.display = adminAuthed ? 'grid' : 'none';
+}
+
+function bindAdminEvents(){
+  document.getElementById('loginForm').addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const email = document.getElementById('adminEmail').value.trim();
+    const pass = document.getElementById('adminPass').value;
+    const msg = document.getElementById('loginMsg');
+    try{ await signInWithEmailAndPassword(auth, email, pass); }
+    catch(err){ msg.textContent = 'بيانات الدخول غير صحيحة.'; msg.className = 'form-msg show error'; }
+  });
+  document.getElementById('logoutBtn').addEventListener('click', ()=>{ signOut(auth); adminDataLoaded = false; });
+
+  document.querySelectorAll('.admin-side [data-atab]').forEach(link=>{
+    link.addEventListener('click', ()=>{
+      document.querySelectorAll('.admin-side [data-atab]').forEach(l=>l.classList.remove('active'));
+      link.classList.add('active');
+      document.querySelectorAll('.atab-panel').forEach(p=>p.style.display='none');
+      document.getElementById('atab-'+link.dataset.atab).style.display = 'block';
+    });
+  });
+
+  document.getElementById('quickSearch').addEventListener('input', async (e)=>{
+    const val = e.target.value.trim().toLowerCase();
+    const box = document.getElementById('quickSearchResults');
+    if(val.length < 2){ box.innerHTML = ''; return; }
+    const snap = await getDocs(collection(db,'nurses'));
+    const matches = snap.docs.filter(d=>{ const n=d.data(); return (n.name||'').toLowerCase().includes(val) || (n.city||'').toLowerCase().includes(val) || (n.governorate||'').toLowerCase().includes(val); }).slice(0,8);
+    box.innerHTML = matches.map(d=>{
+      const n = d.data();
+      return `<div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--line)">
+        <span>${photoCell(n)} ${escapeHtml(n.name)} — ${escapeHtml(n.governorate||'')}</span>
+        <button class="btn btn-sm btn-outline" data-open-edit="${d.id}">تعديل</button></div>`;
+    }).join('') || '<p style="color:var(--ink-soft)">لا نتائج</p>';
+    box.querySelectorAll('[data-open-edit]').forEach(btn => btn.addEventListener('click', ()=> openEditModal(btn.dataset.openEdit)));
+  });
+
+  document.getElementById('closeEditModal').addEventListener('click', ()=> document.getElementById('editModalBackdrop').classList.remove('show'));
+  document.getElementById('editForm').addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const form = e.target;
+    await updateDoc(doc(db,'nurses',editingId), {
+      name: form.name.value.trim(), phone: form.phone.value.trim(), whatsapp: form.whatsapp.value.trim(),
+      governorate: form.governorate.value.trim(), city: form.city.value.trim(), experience: Number(form.experience.value),
+      bio: form.bio.value.trim(), verified: form.verified.checked, blocked: form.blocked.checked,
+    });
+    toast('تم حفظ التعديلات ✅');
+    document.getElementById('editModalBackdrop').classList.remove('show');
+    loadAllNurses(); loadPending(); loadOverview();
+  });
+
+  document.getElementById('newAdBtn').addEventListener('click', ()=> document.getElementById('adModalBackdrop').classList.add('show'));
+  document.getElementById('closeAdModal').addEventListener('click', ()=> document.getElementById('adModalBackdrop').classList.remove('show'));
+  document.getElementById('adForm').addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const form = e.target;
+    try{
+      await addDoc(collection(db,'ads'), { title: form.title.value.trim(), nurseId: form.nurseId.value.trim(), imageURL: form.imageURL.value.trim(), endDate: new Date(form.endDate.value), active: true, createdAt: serverTimestamp() });
+      toast('تمت إضافة الإعلان ✅');
+      document.getElementById('adModalBackdrop').classList.remove('show');
+      form.reset(); loadAds();
+    }catch(err){ console.error(err); toast('حدث خطأ'); }
+  });
+
+  document.getElementById('notifyTarget').addEventListener('change', (e)=>{ document.getElementById('notifyNurseIdWrap').style.display = e.target.value === 'nurse' ? 'block' : 'none'; });
+  document.getElementById('notifyForm').addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const targetType = document.getElementById('notifyTarget').value;
+    const target = targetType === 'nurse' ? document.getElementById('notifyNurseId').value.trim() : 'all';
+    const title = document.getElementById('notifyTitle').value.trim();
+    const body = document.getElementById('notifyBody').value.trim();
+    if(targetType === 'nurse' && !target){ toast('من فضلك أدخل معرّف الممرض'); return; }
+    try{
+      await addDoc(collection(db,'notifications'), { target, title, body, createdAt: serverTimestamp() });
+      toast('تم إرسال الإشعار ✅');
+      e.target.reset(); loadSentNotifications();
+    }catch(err){ console.error(err); toast('حدث خطأ أثناء الإرسال'); }
+  });
+}
+
+function photoCell(n){ return `<img src="${n.photoURL||'https://placehold.co/60'}" style="width:44px;height:44px;border-radius:10px;object-fit:cover">`; }
+
+async function loadOverview(){
+  try{
+    const [allSnap, pendingSnap] = await Promise.all([ getDocs(collection(db,'nurses')), getDocs(query(collection(db,'nurses'), where('approved','==',false))) ]);
+    let approvedCount = 0, visits = 0, ratings = 0;
+    allSnap.forEach(d=>{ const n = d.data(); if(n.approved) approvedCount++; visits += n.visits||0; ratings += n.ratingCount||0; });
+    document.getElementById('ovNurses').textContent = approvedCount;
+    document.getElementById('ovPending').textContent = pendingSnap.size;
+    document.getElementById('ovVisits').textContent = visits;
+    document.getElementById('ovRatings').textContent = ratings;
+    document.getElementById('pendingCountTag').textContent = pendingSnap.size ? `(${pendingSnap.size})` : '';
+  }catch(err){ console.error(err); }
+}
+
+async function loadPending(){
+  const tbody = document.getElementById('pendingTableBody');
+  try{
+    const snap = await getDocs(query(collection(db,'nurses'), where('approved','==',false), orderBy('createdAt','desc')));
+    if(snap.empty){ tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:var(--ink-soft); padding:30px">لا توجد طلبات جديدة 🎉</td></tr>`; return; }
+    tbody.innerHTML = snap.docs.map(d=>{
+      const n = d.data(); const date = n.createdAt?.toDate ? n.createdAt.toDate() : null;
+      return `<tr>
+        <td>${photoCell(n)}</td><td>${escapeHtml(n.name||'')}</td><td>${escapeHtml(n.governorate||'')}</td><td>${escapeHtml(n.specialty||'')}</td><td>${date?timeAgo(date):''}</td>
+        <td class="row-actions">
+          <button class="btn btn-sm btn-primary" data-approve="${d.id}">قبول</button>
+          <button class="btn btn-sm btn-danger" data-reject="${d.id}">رفض</button>
+          <button class="btn btn-sm btn-outline" data-open-edit="${d.id}">عرض</button>
+        </td></tr>`;
+    }).join('');
+    tbody.querySelectorAll('[data-approve]').forEach(b=>b.addEventListener('click', ()=>approveNurse(b.dataset.approve)));
+    tbody.querySelectorAll('[data-reject]').forEach(b=>b.addEventListener('click', ()=>rejectNurse(b.dataset.reject)));
+    tbody.querySelectorAll('[data-open-edit]').forEach(b=>b.addEventListener('click', ()=>openEditModal(b.dataset.openEdit)));
+  }catch(err){ console.error(err); tbody.innerHTML = `<tr><td colspan="6">تعذر تحميل الطلبات</td></tr>`; }
+}
+async function approveNurse(id){ await updateDoc(doc(db,'nurses',id), { approved:true }); toast('تم قبول الممرض ✅'); loadPending(); loadAllNurses(); loadOverview(); }
+async function rejectNurse(id){
+  if(!confirm('هل أنت متأكد من رفض وحذف هذا الطلب؟')) return;
+  await deleteDoc(doc(db,'nurses',id)); await deleteDoc(doc(db,'nurses_private',id)).catch(()=>{});
+  toast('تم رفض الطلب وحذفه'); loadPending(); loadAllNurses(); loadOverview();
+}
+
+async function loadAllNurses(){
+  const tbody = document.getElementById('nursesTableBody');
+  try{
+    const snap = await getDocs(query(collection(db,'nurses'), orderBy('createdAt','desc')));
+    if(snap.empty){ tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:30px">لا يوجد ممرضون بعد</td></tr>`; return; }
+    tbody.innerHTML = snap.docs.map(d=>{
+      const n = d.data();
+      let status = 'pending', label = 'قيد المراجعة';
+      if(n.blocked){ status='blocked'; label='محظور'; } else if(n.approved){ status='approved'; label='معتمد'; }
+      return `<tr>
+        <td>${photoCell(n)}</td>
+        <td>${escapeHtml(n.name||'')} ${n.verified?'✅':''}<br><span style="color:var(--ink-soft); font-size:.75rem">ID: ${d.id}</span></td>
+        <td>${escapeHtml(n.governorate||'')}</td>
+        <td><span class="status-tag ${status}">${label}</span></td>
+        <td>${starString(n.rating)} (${n.ratingCount||0})</td>
+        <td class="row-actions">
+          <button class="btn btn-sm btn-outline" data-open-edit="${d.id}">تعديل</button>
+          <button class="btn btn-sm btn-danger" data-delete="${d.id}">حذف</button>
+        </td></tr>`;
+    }).join('');
+    tbody.querySelectorAll('[data-open-edit]').forEach(b=>b.addEventListener('click', ()=>openEditModal(b.dataset.openEdit)));
+    tbody.querySelectorAll('[data-delete]').forEach(b=>b.addEventListener('click', ()=>deleteNurse(b.dataset.delete)));
+  }catch(err){ console.error(err); tbody.innerHTML = `<tr><td colspan="6">تعذر تحميل البيانات</td></tr>`; }
+}
+async function deleteNurse(id){
+  if(!confirm('هل تريد حذف هذا الممرض نهائيًا؟ لا يمكن التراجع.')) return;
+  await deleteDoc(doc(db,'nurses',id)); await deleteDoc(doc(db,'nurses_private',id)).catch(()=>{});
+  toast('تم الحذف'); loadAllNurses(); loadPending(); loadOverview();
+}
+
+let editingId = null;
+async function openEditModal(id){
+  editingId = id;
+  const snap = await getDoc(doc(db,'nurses',id));
+  if(!snap.exists()) return;
+  const n = snap.data();
+  const form = document.getElementById('editForm');
+  form.name.value = n.name||''; form.phone.value = n.phone||''; form.whatsapp.value = n.whatsapp||'';
+  form.governorate.value = n.governorate||''; form.city.value = n.city||''; form.experience.value = n.experience||0;
+  form.bio.value = n.bio||''; form.verified.checked = !!n.verified; form.blocked.checked = !!n.blocked;
+  const privSnap = await getDoc(doc(db,'nurses_private',id));
+  document.getElementById('nationalIdDisplay').textContent = privSnap.exists() ? privSnap.data().nationalId : 'غير متاح';
+  document.getElementById('editModalBackdrop').classList.add('show');
+}
+
+async function loadAds(){
+  const tbody = document.getElementById('adsTableBody');
+  try{
+    const snap = await getDocs(query(collection(db,'ads'), orderBy('createdAt','desc')));
+    if(snap.empty){ tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:30px">لا توجد إعلانات</td></tr>`; return; }
+    tbody.innerHTML = snap.docs.map(d=>{
+      const a = d.data(); const end = a.endDate?.toDate ? a.endDate.toDate() : new Date(a.endDate);
+      return `<tr>
+        <td>${escapeHtml(a.title||'')}</td><td style="font-size:.8rem">${a.nurseId||''}</td><td>${end?end.toLocaleDateString('ar-EG'):''}</td>
+        <td><span class="status-tag ${a.active?'approved':'blocked'}">${a.active?'فعّال':'متوقف'}</span></td>
+        <td class="row-actions">
+          <button class="btn btn-sm btn-outline" data-toggle-ad="${d.id}" data-next="${!a.active}">${a.active?'إيقاف':'تفعيل'}</button>
+          <button class="btn btn-sm btn-danger" data-delete-ad="${d.id}">حذف</button>
+        </td></tr>`;
+    }).join('');
+    tbody.querySelectorAll('[data-toggle-ad]').forEach(b=>b.addEventListener('click', ()=>toggleAd(b.dataset.toggleAd, b.dataset.next==='true')));
+    tbody.querySelectorAll('[data-delete-ad]').forEach(b=>b.addEventListener('click', ()=>deleteAd(b.dataset.deleteAd)));
+  }catch(err){ console.error(err); tbody.innerHTML = `<tr><td colspan="5">تعذر تحميل الإعلانات</td></tr>`; }
+}
+async function toggleAd(id, active){ await updateDoc(doc(db,'ads',id), {active}); loadAds(); }
+async function deleteAd(id){ if(!confirm('حذف الإعلان؟')) return; await deleteDoc(doc(db,'ads',id)); loadAds(); }
+
+async function loadSentNotifications(){
+  const box = document.getElementById('sentNotifList');
+  try{
+    const snap = await getDocs(query(collection(db,'notifications'), orderBy('createdAt','desc'), limit(10)));
+    box.innerHTML = snap.docs.map(d=>{
+      const n = d.data(); const date = n.createdAt?.toDate ? n.createdAt.toDate() : null;
+      return `<div class="notif-item"><div class="n-icon">🔔</div><div>
+        <b>${escapeHtml(n.title)}</b> <span style="color:var(--ink-soft); font-size:.78rem">(${n.target==='all'?'الجميع':'ممرض: '+n.target})</span>
+        <p style="margin:4px 0 0">${escapeHtml(n.body)}</p>
+        <div style="color:var(--ink-soft); font-size:.78rem; margin-top:4px">${date?timeAgo(date):''}</div></div></div>`;
+    }).join('');
+  }catch(err){ console.error(err); }
+}
+
+/* ---------- Boot ---------- */
+router();
+</script>
+</body>
+</html>
